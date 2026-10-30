@@ -31,9 +31,28 @@ async function post(url, headers, body) {
     if (res.status === 401 || res.status === 403 || /API key not valid/i.test(msg)) throw new Error('La clave de API no es válida.');
     if (res.status === 429) throw new Error('Has llegado al límite gratuito por ahora. Espera un rato (o hasta mañana) o introduce la comida a mano.');
     if (res.status === 404) throw new Error(`El modelo no existe o ya no está disponible. Cámbialo en Ajustes. (${msg})`);
+    if (res.status === 500 || res.status === 503 || res.status === 529) {
+      const e = new Error('Los servidores de la IA están saturados ahora mismo. Espera un minuto e inténtalo de nuevo, o introduce la comida a mano.');
+      e.busy = true;
+      throw e;
+    }
     throw new Error(msg);
   }
   return res.json();
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Reintenta cuando el servidor está saturado (503 "high demand"), esperando cada vez más
+async function withRetry(fn, waits = [1500, 4000]) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!e.busy || i >= waits.length) throw e;
+      await sleep(waits[i]);
+    }
+  }
 }
 
 function requireKey(key) {
@@ -60,12 +79,14 @@ function parseResult(text) {
 }
 
 // ---------- Gemini (gratis) ----------
+const GEMINI_FALLBACK = 'gemini-flash-lite-latest';
+
 async function gemini(parts, { json = true, maxTokens = 8192 } = {}) {
   const S = state.settings;
   const key = requireKey(S.geminiKey);
   const model = (S.geminiModel || 'gemini-flash-latest').trim();
-  const data = await post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+  const call = m => post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
     { 'x-goog-api-key': key },
     {
       systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
@@ -73,6 +94,14 @@ async function gemini(parts, { json = true, maxTokens = 8192 } = {}) {
       generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) },
     }
   );
+  let data;
+  try {
+    data = await withRetry(() => call(model));
+  } catch (e) {
+    // Si el modelo elegido sigue saturado, prueba con el modelo ligero (suele tener menos demanda)
+    if (!e.busy || model === GEMINI_FALLBACK) throw e;
+    data = await withRetry(() => call(GEMINI_FALLBACK), [2000]);
+  }
   const cand = data.candidates?.[0];
   if (!cand) throw new Error(data.promptFeedback?.blockReason ? 'La foto fue bloqueada por el filtro de seguridad.' : 'Respuesta vacía de la IA.');
   return (cand.content?.parts || []).map(p => p.text || '').join('');
