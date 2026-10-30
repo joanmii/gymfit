@@ -35,12 +35,6 @@ async function start() {
   try { first = localStorage.getItem(LAST_TAB) || 'calendar'; } catch { /* nada */ }
   show(VIEWS[first] ? first : 'calendar');
 
-  // Sin zoom: Safari ignora user-scalable=no, así que se bloquea el gesto de pellizcar
-  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
-    document.addEventListener(ev, e => e.preventDefault(), { passive: false });
-  }
-  document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
-
   // Pedir que Safari no borre los datos
   navigator.storage?.persist?.().catch(() => {});
 

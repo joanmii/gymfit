@@ -49,6 +49,7 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 html, body {
+  touch-action: manipulation;
   margin: 0;
   background: var(--bg);
   color: var(--text);

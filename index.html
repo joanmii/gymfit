@@ -17,6 +17,19 @@
   <link rel="icon" type="image/png" href="icons/icon-192.png">
 
   <link rel="stylesheet" href="css/styles.css">
+
+  <!-- Sin zoom: Safari ignora user-scalable=no, así que se bloquea el pellizco (el doble toque lo evita el CSS) -->
+  <script>
+    (function () {
+      var stop = function (e) { e.preventDefault(); };
+      ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (ev) {
+        document.addEventListener(ev, stop, { passive: false });
+      });
+      document.addEventListener('touchmove', function (e) {
+        if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault();
+      }, { passive: false });
+    })();
+  </script>
 </head>
 <body>
   <main>
