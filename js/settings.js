@@ -6,7 +6,7 @@ import { testConnection } from './api.js';
 import { state, saveSettings, esc, toast } from './utils.js';
 
 let root;
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 export function initSettings(el) {
   root = el;
@@ -161,6 +161,8 @@ async function exportData() {
     routines: await db.allRoutines(),
     sessions: await db.allSessions(),
     weights: await db.allWeights(),
+    activity: await db.allActivity(),
+    favorites: await db.allFavorites(),
   };
   const name = `gymfit-${new Date().toISOString().slice(0, 10)}.json`;
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
@@ -182,7 +184,7 @@ async function importData(file) {
   try {
     const data = JSON.parse(await file.text());
     if (data.app !== 'gymfit') throw new Error('formato');
-    if (!confirm(`Importar ${data.workouts?.length || 0} días, ${data.sessions?.length || 0} entrenos registrados, ${data.routines?.length || 0} rutinas, ${data.meals?.length || 0} comidas y ${data.weights?.length || 0} pesadas? Se combinarán con los datos actuales.`)) return;
+    if (!confirm(`Importar ${data.workouts?.length || 0} días, ${data.sessions?.length || 0} entrenos registrados, ${data.routines?.length || 0} rutinas, ${data.meals?.length || 0} comidas, ${data.weights?.length || 0} pesadas y ${data.favorites?.length || 0} favoritas? Se combinarán con los datos actuales.`)) return;
     for (const w of data.workouts || []) { await db.putWorkout(w); state.workouts.set(w.date, w); }
     for (const m of data.meals || []) await db.putMeal(m);
     for (const r of data.routines || []) await db.putRoutine(r);
@@ -190,6 +192,8 @@ async function importData(file) {
     for (const x of data.sessions || []) await db.putSession(x);
     state.sessions = await db.allSessions();
     if (data.weights?.length) await db.putWeights(data.weights);
+    for (const a of data.activity || []) await db.putActivity(a);
+    for (const f of data.favorites || []) await db.putFavorite(f);
     if (data.settings) { Object.assign(state.settings, data.settings); saveSettings(); }
     renderSettings();
     toast('Copia importada ✅');

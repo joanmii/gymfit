@@ -8,7 +8,8 @@ import { M } from './utils.js';
 // Zonas musculares que se pueden tocar. "group" enlaza con los grupos del calendario.
 export const PARTS = {
   'pecho-sup':     { name: 'Pecho superior',          group: 'pecho' },
-  'pecho-inf':     { name: 'Pecho medio e inferior',  group: 'pecho' },
+  'pecho-med':     { name: 'Pecho medio',             group: 'pecho' },
+  'pecho-inf':     { name: 'Pecho inferior',          group: 'pecho' },
   'deltoide-ant':  { name: 'Deltoides anterior',      group: 'hombros' },
   'deltoide-lat':  { name: 'Deltoides lateral',       group: 'hombros' },
   'deltoide-post': { name: 'Deltoides posterior',     group: 'hombros' },
@@ -49,7 +50,8 @@ const FRONT = [
   ['deltoide-lat', DELT_LAT],
   ['deltoide-ant', 'M62 70 C54 82 52 100 54 118 C60 108 65 96 69 84 C70 78 68 72 62 70 Z'],
   ['pecho-sup',    'M99 74 L75 74 C71 77 70 82 69 88 C79 88 90 90 99 92 Z'],
-  ['pecho-inf',    'M99 94.5 C90 92.5 79 90.5 68.5 90.5 C67 96 65 100 62 105 C70 116 86 122 99 121 Z'],
+  ['pecho-med',    'M99 94.5 C90 92.5 79 90.5 68.5 90.5 C67 95 65.5 99 63.5 102.5 C75 104 88 105.5 99 107 Z'],
+  ['pecho-inf',    'M99 109.5 C88 108 75 106.5 62.6 105 C70 116 86 122 99 121 Z'],
   ['biceps',       ARM_UPPER],
   ['antebrazo',    FOREARM],
   ['abdominales',  'M85 125 h13.5 v17 h-13.5 Z M85 145 h13.5 v17 h-13.5 Z M85.5 165 h13 v17 h-13 Z M86 185 h12.5 v24 C93 207 88 200 86 192 Z'],

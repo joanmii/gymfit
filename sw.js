@@ -2,7 +2,7 @@
 // Service worker: permite abrir la app sin conexión
 // Sube el número de CACHE cuando publiques cambios importantes
 // =========================================================
-const CACHE = 'gymfit-v9';
+const CACHE = 'gymfit-v10';
 const ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,8 @@ const ASSETS = [
   './js/api.js',
   './js/barcode.js',
   './js/weight.js',
+  './js/energy.js',
+  './js/generator.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',

@@ -743,3 +743,51 @@ button.w-row:active { background: var(--card2); }
 code { font-family: ui-monospace, Menlo, monospace; font-size: .88em; background: var(--card2); border-radius: 6px; padding: 1px 5px; overflow-wrap: anywhere; }
 .sheet code { background: var(--card3); }
 @media (prefers-color-scheme: dark) { .sheet .list { background: var(--card2); } .sheet .w-row { border-color: rgba(255,255,255,.07); } }
+
+/* ---------- Actividad (pasos y entreno) ---------- */
+.act-card .card-head { margin-bottom: 10px; }
+.act-total { font-size: 13px; color: var(--muted); font-weight: 600; }
+.act-total b { font-family: var(--rounded); font-size: 18px; color: var(--orange); font-weight: 800; }
+.act-grid { display: grid; gap: 8px; }
+.act {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  border: 0; border-radius: 14px; padding: 10px 12px; background: var(--card2);
+  transition: transform .15s var(--spring);
+}
+button.act:active { transform: scale(.98); }
+.act .e { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-size: 20px; flex: none;
+  background: color-mix(in srgb, var(--orange) 22%, transparent); }
+.act .t { flex: 1; min-width: 0; }
+.act .t b { display: block; font-size: 16px; font-family: var(--rounded); }
+.act .t small { display: block; font-size: 12.5px; color: var(--muted); }
+.act .k { font-family: var(--rounded); font-weight: 800; font-size: 18px; text-align: right; color: var(--orange); }
+.act .k small { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
+.act-note { font-size: 13px; margin-top: 10px; text-align: center; color: var(--muted); }
+.act-note b { color: var(--text); font-family: var(--rounded); }
+.burn-line { text-align: center; font-size: 15px; color: var(--muted); padding-top: 2px; }
+.burn-line b { color: var(--orange); font-family: var(--rounded); font-size: 18px; }
+
+/* ---------- Puntuación de comidas ---------- */
+.grade {
+  flex: none; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center;
+  font-family: var(--rounded); font-weight: 850; font-size: 15px;
+  color: #111; background: var(--c);
+}
+.grade.big { width: 46px; height: 46px; border-radius: 13px; font-size: 26px; }
+.score-head { display: flex; align-items: center; gap: 12px; }
+.score-head b { display: block; font-size: 16px; }
+.score-head small { display: block; font-size: 12.5px; color: var(--muted); }
+.per100 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-top: 12px; font-family: var(--rounded); font-size: 14px; }
+.per100 span { font-family: inherit; font-size: 12px; color: var(--muted); font-weight: 600; width: 100%; }
+.score-why { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.score-why b { color: var(--text); }
+
+/* ---------- Favoritas ---------- */
+.sheet-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.icon-btn.star { font-size: 22px; line-height: 1; color: var(--muted); flex: none; }
+.icon-btn.star.on { color: #ffd60a; }
+
+/* ---------- Creador de rutinas ---------- */
+.gen-presets { gap: 2px 6px; margin: -4px 0 8px -4px; }
+.gen-plan { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-left: 40px; }
+.gen-plan b { font-family: var(--rounded); font-size: 16px; }

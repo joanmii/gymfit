@@ -7,6 +7,7 @@ import { openSheet, setSheetContent, closeSheet } from './sheet.js';
 import { bodyMap, setMapSelection, PARTS, partColor } from './bodymap.js';
 import { EXERCISES, EX, EQUIPMENT, TEMPLATES, videoUrl } from './exercises.js';
 import { startWorkout, openWorkout, getActive, progressBlock } from './workout.js';
+import { GEN_GROUPS, PRESETS, generateRoutine, swapExercise, estimateMinutes, routineName } from './generator.js';
 import { state, MUSCLES, M, esc, toast, haptic } from './utils.js';
 
 const EQ_EMOJI = { barra: '🏋️', mancuernas: '💪', maquina: '⚙️', polea: '🔗', corporal: '🤸', kettlebell: '🔔' };
@@ -28,6 +29,7 @@ export function initRoutines(el) {
     const r = e.target.closest('[data-routine]');
     if (r) return openEditor(state.routines.find(x => x.id === Number(r.dataset.routine)));
     if (e.target.closest('#new-routine')) return openEditor();
+    if (e.target.closest('#gen-routine')) return openGenerator();
     const tp = e.target.closest('[data-template]');
     if (tp) {
       const tpl = TEMPLATES[Number(tp.dataset.template)];
@@ -79,8 +81,9 @@ function routinesHtml() {
 
   return `
     ${cards || `<div class="card empty"><span class="e">📋</span><b>Aún no tienes rutinas</b>Crea una desde cero o empieza con una plantilla.</div>`}
+    <button class="btn primary" id="gen-routine">✨ Crear rutina automática</button>
     <button class="btn primary" id="new-routine">+ Nueva rutina</button>
-    <button class="btn secondary" id="free-workout">⚡ Entreno libre (sin rutina)</button>
+    <button class="btn primary" id="free-workout">⚡ Entrenamiento libre</button>
     <div class="section-label">Plantillas</div>
     <div class="action-list">
       ${TEMPLATES.map((t, i) => `<button class="action" data-template="${i}" style="--c:color-mix(in srgb,var(--accent) 22%,transparent)">
@@ -307,6 +310,132 @@ function openEditor(existing) {
   });
 
   openSheet(editorHtml(), mountEditor);
+}
+
+// ---------- Creador automático de rutinas ----------
+const GEN_KEY = 'gymfit-gen';
+const DURATIONS = [30, 45, 60, 75, 90];
+function loadGenOpts() {
+  const def = { minutes: 60, groups: ['pecho', 'triceps'], eqs: Object.keys(EQUIPMENT) };
+  try { return { ...def, ...JSON.parse(localStorage.getItem(GEN_KEY) || '{}') }; } catch { return def; }
+}
+
+function openGenerator() {
+  const saved = loadGenOpts();
+  const opts = { minutes: saved.minutes, groups: new Set(saved.groups), eqs: new Set(saved.eqs) };
+
+  const html = () => `
+    <h2 class="sheet-title">✨ Crear rutina</h2>
+    <div class="muted small">Elige y te monto una rutina equilibrada. Luego puedes cambiar lo que quieras.</div>
+
+    <div class="label">Duración</div>
+    <div class="chips">
+      ${DURATIONS.map(m => `<button class="chip ${opts.minutes === m ? 'on' : ''}" data-min="${m}" style="--c:var(--accent)">${m} min</button>`).join('')}
+    </div>
+
+    <div class="label">Grupos musculares</div>
+    <div class="chips gen-presets">
+      ${PRESETS.map((p, i) => `<button class="link" data-preset="${i}">${p.name}</button>`).join('')}
+    </div>
+    <div class="chips">
+      ${GEN_GROUPS.map(g => `<button class="chip ${opts.groups.has(g) ? 'on' : ''}" data-gg="${g}" style="--c:${M[g].color}"><span class="dot"></span>${M[g].name}</button>`).join('')}
+    </div>
+
+    <div class="label">Material disponible</div>
+    <div class="chips">
+      ${Object.entries(EQUIPMENT).map(([id, name]) => `<button class="chip ${opts.eqs.has(id) ? 'on' : ''}" data-geq="${id}" style="--c:var(--blue)">${EQ_EMOJI[id]} ${name}</button>`).join('')}
+    </div>
+
+    <button class="btn primary" id="gen-go" style="margin-top:22px">Crear rutina</button>`;
+
+  const mount = body => {
+    body.addEventListener('click', e => {
+      const mn = e.target.closest('[data-min]');
+      if (mn) { opts.minutes = Number(mn.dataset.min); haptic(); return setSheetContent(html(), mount); }
+      const pr = e.target.closest('[data-preset]');
+      if (pr) { opts.groups = new Set(PRESETS[Number(pr.dataset.preset)].groups); haptic(); return setSheetContent(html(), mount); }
+      const gg = e.target.closest('[data-gg]');
+      if (gg) {
+        const g = gg.dataset.gg;
+        opts.groups.has(g) ? opts.groups.delete(g) : opts.groups.add(g);
+        gg.classList.toggle('on', opts.groups.has(g)); haptic(); return;
+      }
+      const ge = e.target.closest('[data-geq]');
+      if (ge) {
+        const q = ge.dataset.geq;
+        opts.eqs.has(q) ? opts.eqs.delete(q) : opts.eqs.add(q);
+        ge.classList.toggle('on', opts.eqs.has(q)); haptic(); return;
+      }
+      if (e.target.closest('#gen-go')) {
+        if (!opts.groups.size) return toast('Elige al menos un grupo muscular');
+        if (!opts.eqs.size) return toast('Elige al menos un tipo de material');
+        try { localStorage.setItem(GEN_KEY, JSON.stringify({ minutes: opts.minutes, groups: [...opts.groups], eqs: [...opts.eqs] })); } catch { /* nada */ }
+        showGenerated(opts, html, mount);
+      }
+    });
+  };
+  openSheet(html(), mount);
+}
+
+function showGenerated(opts, formHtml, formMount) {
+  const groups = GEN_GROUPS.filter(g => opts.groups.has(g));
+  let res = generateRoutine({ minutes: opts.minutes, groups, eqs: opts.eqs });
+  let name = `${routineName(groups)} · ${opts.minutes} min`;
+
+  const html = () => {
+    const items = res.items;
+    const primary = [...new Set(items.flatMap(i => EX[i.ex].p))];
+    const secondary = [...new Set(items.flatMap(i => EX[i.ex].s))].filter(p => !primary.includes(p));
+    const sets = items.reduce((a, i) => a + Number(i.sets), 0);
+    return `
+      <button class="link back" id="gen-back">${chev('l')} Cambiar opciones</button>
+      <h2 class="sheet-title">${esc(name)}</h2>
+      <div class="muted small">≈ ${estimateMinutes(items)} min · ${items.length} ejercicios · ${sets} series</div>
+      ${res.warnings.map(w => `<div class="notice">${esc(w)}</div>`).join('')}
+      ${items.length ? `
+      <div class="card" style="margin-top:14px">${bodyMap({ primary, secondary, small: true })}</div>
+      <div id="gen-items">${items.map((it, i) => {
+        const ex = EX[it.ex];
+        return `<div class="card item rt-item">
+          <div class="item-top">
+            <span class="rt-num" style="--c:${partColor(ex.p[0])}">${i + 1}</span>
+            <div class="rt-name"><b>${esc(ex.name)}</b><small>${EQ_EMOJI[ex.eq]} ${EQUIPMENT[ex.eq]} · ${ex.p.map(p => PARTS[p].name).join(', ')}</small></div>
+            <button class="icon-btn" data-swap="${i}" aria-label="Cambiar por otro ejercicio">🔀</button>
+          </div>
+          <div class="gen-plan"><b>${it.sets} × ${esc(it.reps)}</b><button class="link" data-info="${it.ex}">▶️ Ver técnica</button></div>
+        </div>`;
+      }).join('')}</div>
+      <button class="btn primary" id="gen-start">▶ Empezar entreno ahora</button>
+      <button class="btn secondary" id="gen-save">Guardar rutina (puedes editarla)</button>
+      <button class="btn ghost" id="gen-again">🔀 Generar otra variante</button>` : `
+      <div class="card empty"><span class="e">🤷</span><b>No hay ejercicios</b>Prueba con otro material o más grupos.</div>`}`;
+  };
+
+  const plain = () => res.items.map(({ g, ...it }) => ({ ...it }));
+  const mount = body => {
+    body.addEventListener('click', e => {
+      if (e.target.closest('#gen-back')) return setSheetContent(formHtml(), formMount);
+      if (e.target.closest('#gen-again')) {
+        res = generateRoutine({ minutes: opts.minutes, groups, eqs: opts.eqs });
+        haptic();
+        return setSheetContent(html(), mount);
+      }
+      const sw = e.target.closest('[data-swap]');
+      if (sw) {
+        if (!swapExercise(res.items, Number(sw.dataset.swap), opts.eqs)) return toast('No hay otro ejercicio de ese grupo con tu material');
+        haptic();
+        return setSheetContent(html(), mount);
+      }
+      const info = e.target.closest('[data-info]');
+      if (info) return window.open(videoUrl(EX[info.dataset.info]), '_blank', 'noopener');
+      if (e.target.closest('#gen-start')) {
+        closeSheet(true);
+        return startWorkout({ id: null, name, items: plain() });
+      }
+      if (e.target.closest('#gen-save')) return openEditor({ name, items: plain() });
+    });
+  };
+  setSheetContent(html(), mount);
 }
 
 const arrow = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;

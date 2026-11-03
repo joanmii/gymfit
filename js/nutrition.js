@@ -8,6 +8,7 @@ import { renderWeight, openWeighIn } from './weight.js';
 import { ring, bars } from './charts.js';
 import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet, onSheetCleanup } from './sheet.js';
+import { refreshBodyWeight, hasBodyWeight, bodyKg, stepsKcal, stepsKm, dayWorkout } from './energy.js';
 import { state, hasAiKey, keyOf, today, addDays, fmtLong, cap, esc, r0, r1, toast, haptic, WD_SHORT } from './utils.js';
 
 const MEAL_TYPES = [
@@ -40,6 +41,7 @@ export function initNutrition(el) {
     if (e.target.closest('[data-today]')) { day = today(); return renderNutrition(); }
     const tr = e.target.closest('[data-trend]');
     if (tr) { trend = Number(tr.dataset.trend); return renderNutrition(); }
+    if (e.target.closest('[data-steps]')) return openSteps();
     const meal = e.target.closest('[data-meal]');
     if (meal) {
       const all = await db.mealsByDate(keyOf(day));
@@ -72,6 +74,12 @@ export async function renderNutrition() {
   const tot = sum(meals);
   const over = tot.kcal > S.kcal;
   const left = S.kcal - tot.kcal;
+
+  // Actividad: pasos y entreno del día
+  await refreshBodyWeight();
+  const steps = (await db.activityByDate(k))?.steps || 0;
+  const wk = dayWorkout(k);
+  const kSteps = stepsKcal(steps), kGym = wk?.kcal || 0, burned = kSteps + kGym;
 
   // Tendencia
   const from = addDays(today(), -(trend - 1));
@@ -111,6 +119,24 @@ export async function renderNutrition() {
         ${macroBar('Hidratos', tot.carbs, S.carbs, MACRO_COLORS.carbs)}
         ${macroBar('Grasa', tot.fat, S.fat, MACRO_COLORS.fat)}
       </div>
+    </div>
+
+    <div class="card act-card">
+      <div class="card-head"><h3>🔥 Actividad</h3><span class="act-total"><b>${r0(burned)}</b> kcal quemadas</span></div>
+      <div class="act-grid">
+        <button class="act" data-steps>
+          <span class="e">👟</span>
+          <span class="t"><b>${steps ? steps.toLocaleString('es-ES') : 'Añadir pasos'}</b><small>${steps ? `pasos · ${r1(stepsKm(steps)).toLocaleString('es-ES')} km` : 'Toca para apuntarlos'}</small></span>
+          <span class="k">${steps ? `${r0(kSteps)}<small>kcal</small>` : '+'}</span>
+        </button>
+        <div class="act">
+          <span class="e">🏋️</span>
+          <span class="t"><b>${wk ? `${wk.minutes} min` : 'Sin entreno'}</b><small>${wk ? (wk.assumed ? 'entreno (duración supuesta)' : 'de entreno') : 'Se suma al entrenar'}</small></span>
+          <span class="k">${wk ? `${r0(kGym)}<small>kcal</small>` : '–'}</span>
+        </div>
+      </div>
+      ${burned ? `<div class="act-note">Comido <b>${r0(tot.kcal)}</b> − actividad <b>${r0(burned)}</b> = <b>${r0(tot.kcal - burned)}</b> kcal netas</div>` : ''}
+      ${hasBodyWeight() ? '' : `<div class="act-note muted">Calculado con ${bodyKg()} kg: apunta tu peso en ⚖️ Peso para afinar.</div>`}
     </div>
 
     ${!isToday ? `<button class="btn secondary" data-today style="margin-bottom:6px">Volver a hoy</button>` : ''}
@@ -167,8 +193,101 @@ function mealRow(m) {
       <div class="name">${esc(m.name)}</div>
       <div class="mac"><span><b class="p-c">P</b> ${r0(m.protein)}g</span><span><b class="c-c">H</b> ${r0(m.carbs)}g</span><span><b class="f-c">G</b> ${r0(m.fat)}g</span></div>
     </div>
+    ${gradeBadge(mealScore(m))}
     <div class="kcal">${r0(m.kcal)}<small>kcal</small></div>
   </button>`;
+}
+
+// ---------- Puntuación de una comida según sus macros por gramo ----------
+// Premia mucha proteína por caloría, poca densidad calórica (kcal por gramo) y grasa moderada.
+// Devuelve una nota de 0 a 10 y una letra de la A (mejor) a la E.
+const GRADES = [
+  { min: 8,   g: 'A', c: '#30d158', t: 'Excelente' },
+  { min: 6.5, g: 'B', c: '#9bd55a', t: 'Buena' },
+  { min: 5,   g: 'C', c: '#ffd60a', t: 'Correcta' },
+  { min: 3.5, g: 'D', c: '#ff9f0a', t: 'Mejorable' },
+  { min: 0,   g: 'E', c: '#ff453a', t: 'Pobre' },
+];
+const clamp01 = x => Math.max(0, Math.min(1, x));
+
+export function mealScore(m) {
+  const items = m.items || [];
+  const sumOf = f => items.length ? items.reduce((a, i) => a + (+i[f] || 0), 0) : +m[f] || 0;
+  const kcal = sumOf('kcal'), protein = sumOf('protein'), fat = sumOf('fat'), carbs = sumOf('carbs');
+  const grams = items.reduce((a, i) => a + (+i.grams || 0), 0);
+  if (kcal < 15) return null;
+
+  const pShare = protein * 4 / kcal;                  // parte de las calorías que viene de la proteína
+  const fShare = fat * 9 / kcal;                      // parte que viene de la grasa
+  const density = grams > 0 ? kcal / grams : null;    // kcal por gramo
+  const sP = clamp01(pShare / 0.30);                  // ≥30 % de proteína = nota máxima
+  const sF = clamp01((0.60 - fShare) / 0.25);         // ≤35 % de grasa = máxima, ≥60 % = 0
+  const sD = density === null ? null : clamp01((4 - density) / 3);   // ≤1 kcal/g = máxima, ≥4 = 0
+  const score = 10 * (sD === null ? 0.7 * sP + 0.3 * sF : 0.5 * sP + 0.3 * sD + 0.2 * sF);
+  const grade = GRADES.find(x => score >= x.min);
+  const per100 = grams > 0 ? { kcal: kcal / grams * 100, protein: protein / grams * 100, carbs: carbs / grams * 100, fat: fat / grams * 100 } : null;
+  return { score, ...grade, pShare, fShare, density, per100 };
+}
+
+const gradeBadge = s => s ? `<span class="grade" style="--c:${s.c}" title="Nota ${r1(s.score)}/10">${s.g}</span>` : '';
+
+function scoreCard(s) {
+  if (!s) return '<div class="muted small">Añade alimentos para ver la puntuación.</div>';
+  const pct = x => `${r0(x * 100)} %`;
+  return `<div class="score-head">
+      <span class="grade big" style="--c:${s.c}">${s.g}</span>
+      <div><b>${s.t} · ${r1(s.score).toLocaleString('es-ES')}/10</b><small>Según sus macros por gramo</small></div>
+    </div>
+    ${s.per100 ? `<div class="per100"><span>Por 100 g</span>
+      <b>${r0(s.per100.kcal)} kcal</b><b class="p-c">P ${r1(s.per100.protein)}</b><b class="c-c">H ${r1(s.per100.carbs)}</b><b class="f-c">G ${r1(s.per100.fat)}</b></div>` : ''}
+    <div class="score-why">
+      <span>Proteína: <b>${pct(s.pShare)}</b> de las kcal</span>
+      ${s.density !== null ? `<span>Densidad: <b>${r1(s.density).toLocaleString('es-ES')}</b> kcal/g</span>` : ''}
+      <span>Grasa: <b>${pct(s.fShare)}</b> de las kcal</span>
+    </div>`;
+}
+
+// ---------- Pasos del día ----------
+async function openSteps() {
+  const k = keyOf(day);
+  const current = (await db.activityByDate(k))?.steps || 0;
+  const est = n => n > 0 ? `≈ <b>${r1(stepsKm(n)).toLocaleString('es-ES')} km</b> · <b>${r0(stepsKcal(n))} kcal</b> quemadas` : 'Escribe tus pasos para ver la estimación';
+  openSheet(`
+    <h2 class="sheet-title">Pasos</h2>
+    <div class="muted small">${+day === +today() ? 'Hoy' : esc(cap(fmtLong(day)))}</div>
+    <label class="field"><span>Pasos caminados</span>
+      <input id="steps" type="number" inputmode="numeric" min="0" step="1" placeholder="Ej: 8500" value="${current || ''}">
+    </label>
+    <div class="chips" style="margin-top:10px">
+      ${[1000, 2500, 5000].map(n => `<button class="chip" data-plus="${n}" style="--c:var(--accent)">+${n.toLocaleString('es-ES')}</button>`).join('')}
+    </div>
+    <div class="notice" id="steps-est">${est(current)}</div>
+    <div class="muted small" style="margin-top:10px;line-height:1.45">Los tienes en la app <b>Salud</b> del iPhone → Explorar → Actividad → Pasos.
+      La estimación usa tu peso (${r1(bodyKg()).toLocaleString('es-ES')} kg${hasBodyWeight() ? '' : ', por defecto'})${state.settings.height ? ' y tu altura' : ''}, y cuenta solo lo que gastas de más al caminar.</div>
+    <div style="margin-top:18px">
+      <button class="btn primary" id="save">Guardar</button>
+      ${current ? '<button class="btn ghost danger" id="del">Borrar pasos</button>' : ''}
+    </div>`, body => {
+    const inp = body.querySelector('#steps');
+    const upd = () => { body.querySelector('#steps-est').innerHTML = est(parseInt(inp.value, 10) || 0); };
+    inp.addEventListener('input', upd);
+    body.addEventListener('click', async e => {
+      const plus = e.target.closest('[data-plus]');
+      if (plus) { inp.value = (parseInt(inp.value, 10) || 0) + Number(plus.dataset.plus); haptic(); return upd(); }
+      if (e.target.closest('#save')) {
+        const n = parseInt(inp.value, 10) || 0;
+        if (n > 0) await db.putActivity({ date: k, steps: n, updatedAt: Date.now() });
+        else await db.deleteActivity(k);
+        haptic(); closeSheet(); renderNutrition();
+        return toast(n > 0 ? 'Pasos guardados 👟' : 'Pasos borrados');
+      }
+      if (e.target.closest('#del')) {
+        await db.deleteActivity(k);
+        closeSheet(); renderNutrition(); toast('Pasos borrados');
+      }
+    });
+    setTimeout(() => inp.focus(), 350);
+  });
 }
 
 function sum(meals, divideBy = 1) {
@@ -193,6 +312,7 @@ function openAddMenu() {
       ${tile('gal', '🖼️', 'Galería', 'Foto que ya tengas', 'var(--orange)')}
     </div>
     <button class="action" data-a="man" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">✍️</span><div>Introducir a mano<small>Sin IA, tú pones los datos</small></div></button>
+    <div id="favs"></div>
     <div id="recent"></div>`, body => {
     body.addEventListener('click', e => {
       const a = e.target.closest('[data-a]')?.dataset.a;
@@ -203,9 +323,37 @@ function openAddMenu() {
       if (a === 'man') openReview(newDraft({ items: [blankItem()] }), false, true);
       const r = e.target.closest('[data-recent]');
       if (r) repeatMeal(recentCache[Number(r.dataset.recent)]);
+      const f = e.target.closest('[data-fav]');
+      if (f) repeatMeal(favCache[Number(f.dataset.fav)]);
     });
+    renderFavorites(body.querySelector('#favs'));
     renderRecent(body.querySelector('#recent'));
   });
+}
+
+const recentRow = (m, attr) => `
+  <button class="recent" ${attr}>
+    ${m.photo ? `<img src="${m.photo}" alt="">` : `<span class="ph">${MEAL_TYPES.find(t => t.id === m.type)?.emoji || '🍽️'}</span>`}
+    <span class="n">${esc(m.name)}</span>
+    ${gradeBadge(mealScore(m))}
+    <span class="k">${r0(m.kcal)} kcal</span>
+  </button>`;
+
+// ---------- Comidas favoritas ----------
+let favCache = [];
+const favKey = name => String(name || '').trim().toLowerCase();
+
+async function loadFavorites() {
+  favCache = (await db.allFavorites()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  return favCache;
+}
+
+async function renderFavorites(el) {
+  await loadFavorites();
+  if (!el.isConnected) return;
+  el.innerHTML = `<div class="label">⭐ Favoritas</div>${favCache.length
+    ? `<div class="recent-list">${favCache.map((m, i) => recentRow(m, `data-fav="${i}"`)).join('')}</div>`
+    : '<div class="muted small" style="margin:0 2px">Al revisar una comida, pulsa ☆ para guardarla aquí y añadirla con un toque.</div>'}`;
 }
 
 // ---------- Comidas recientes (repetir con un toque) ----------
@@ -217,12 +365,7 @@ async function renderRecent(el) {
   recentCache = meals.filter(m => { const k = m.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
   if (!recentCache.length || !el.isConnected) return;
   el.innerHTML = `<div class="label">Repetir una comida reciente</div>
-    <div class="recent-list">${recentCache.map((m, i) => `
-      <button class="recent" data-recent="${i}">
-        ${m.photo ? `<img src="${m.photo}" alt="">` : `<span class="ph">${MEAL_TYPES.find(t => t.id === m.type)?.emoji || '🍽️'}</span>`}
-        <span class="n">${esc(m.name)}</span>
-        <span class="k">${r0(m.kcal)} kcal</span>
-      </button>`).join('')}</div>`;
+    <div class="recent-list">${recentCache.map((m, i) => recentRow(m, `data-recent="${i}"`)).join('')}</div>`;
 }
 
 function repeatMeal(m) {
@@ -417,7 +560,10 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
   const conf = { low: 'Confianza baja · revisa las cantidades', medium: 'Confianza media', high: 'Confianza alta' };
 
   const render = () => `
-    <h2 class="sheet-title">${editing ? 'Editar comida' : 'Revisa y guarda'}</h2>
+    <div class="sheet-title-row">
+      <h2 class="sheet-title">${editing ? 'Editar comida' : 'Revisa y guarda'}</h2>
+      <button class="icon-btn star" id="fav" aria-label="Guardar en favoritas">☆</button>
+    </div>
     <div class="review-top">
       ${draft.photo ? `<img src="${draft.photo}" alt="">` : ''}
       <label class="field"><span>Nombre</span><input id="mname" value="${esc(draft.name)}" placeholder="Ej: Pollo con arroz"></label>
@@ -430,6 +576,8 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
     <div class="label">Alimentos</div>
     <div id="items">${draft.items.map(itemCard).join('')}</div>
     <button class="btn secondary" id="add-item">+ Añadir alimento</button>
+    <div class="label">Puntuación</div>
+    <div class="card score-card" id="score"></div>
     ${editing ? '<button class="btn ghost danger" id="del">Borrar comida</button>' : ''}
     <div class="totals">
       <div class="totals-row" id="totals"></div>
@@ -444,11 +592,52 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
         <div><b class="p-c">${r0(t.protein)}g</b><span>proteína</span></div>
         <div><b class="c-c">${r0(t.carbs)}g</b><span>hidratos</span></div>
         <div><b class="f-c">${r0(t.fat)}g</b><span>grasa</span></div>`;
+      body.querySelector('#score').innerHTML = scoreCard(mealScore({ items: draft.items }));
       return t;
     };
     updateTotals();
 
-    body.querySelector('#mname').addEventListener('input', e => { draft.name = e.target.value; });
+    // Comida lista para guardar (sin los datos internos de escalado)
+    const buildMeal = () => {
+      const t = updateTotals();
+      const items = draft.items
+        .filter(i => i.name.trim() || i.kcal)
+        .map(({ base, ...i }) => ({ ...i, name: i.name.trim() || 'Alimento' }));
+      return {
+        items,
+        name: draft.name.trim() || items.map(i => i.name).slice(0, 2).join(' y '),
+        kcal: r0(t.kcal), protein: r1(t.protein), carbs: r1(t.carbs), fat: r1(t.fat),
+      };
+    };
+
+    // Favorita: se reconoce por el nombre
+    const star = body.querySelector('#fav');
+    const findFav = () => { const n = favKey(draft.name || buildMeal().name); return n ? favCache.find(f => favKey(f.name) === n) : null; };
+    const paintStar = () => {
+      const on = !!findFav();
+      star.classList.toggle('on', on);
+      star.textContent = on ? '★' : '☆';
+      star.setAttribute('aria-label', on ? 'Quitar de favoritas' : 'Guardar en favoritas');
+    };
+    loadFavorites().then(() => { if (star.isConnected) paintStar(); });
+    star.addEventListener('click', async () => {
+      const f = findFav();
+      if (f) {
+        await db.deleteFavorite(f.id);
+        toast('Quitada de favoritas');
+      } else {
+        const m = buildMeal();
+        if (!m.items.length) return toast('Añade al menos un alimento');
+        await db.putFavorite({ name: m.name, type: draft.type, photo: draft.photo || null, items: m.items,
+          kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat, createdAt: Date.now() });
+        toast('Guardada en favoritas ⭐');
+      }
+      haptic();
+      await loadFavorites();
+      paintStar();
+    });
+
+    body.querySelector('#mname').addEventListener('input', e => { draft.name = e.target.value; paintStar(); });
     body.querySelector('#mtype').addEventListener('change', e => { draft.type = e.target.value; });
 
     body.querySelector('#items').addEventListener('input', e => {
@@ -497,20 +686,17 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
     });
 
     body.querySelector('#save').addEventListener('click', async () => {
-      const t = updateTotals();
-      const items = draft.items
-        .filter(i => i.name.trim() || i.kcal)
-        .map(({ base, ...i }) => ({ ...i, name: i.name.trim() || 'Alimento' }));
-      if (!items.length) return toast('Añade al menos un alimento');
+      const m = buildMeal();
+      if (!m.items.length) return toast('Añade al menos un alimento');
       const meal = {
         ...(draft.id ? { id: draft.id } : {}),
         date: draft.date,
         type: draft.type,
-        name: draft.name.trim() || items.map(i => i.name).slice(0, 2).join(' y '),
+        name: m.name,
         photo: draft.photo,
         confidence: draft.confidence,
-        items,
-        kcal: r0(t.kcal), protein: r1(t.protein), carbs: r1(t.carbs), fat: r1(t.fat),
+        items: m.items,
+        kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat,
         createdAt: draft.createdAt || Date.now(),
       };
       await db.putMeal(meal);

@@ -8,6 +8,7 @@ import { initRoutines, renderRoutines } from './routines.js';
 import { initStats, renderStats } from './stats.js';
 import { initNutrition, renderNutrition } from './nutrition.js';
 import { initSettings, renderSettings } from './settings.js';
+import { refreshBodyWeight } from './energy.js';
 
 const VIEWS = {
   calendar:  { init: initCalendar,  render: renderCalendar },
@@ -25,6 +26,7 @@ async function start() {
   state.workouts = new Map(all.map(w => [w.date, w]));
   state.routines = await db.allRoutines();
   state.sessions = await db.allSessions();
+  await refreshBodyWeight();
 
   for (const [name, v] of Object.entries(VIEWS)) v.init(document.getElementById(`view-${name}`));
 

@@ -3,7 +3,8 @@
 App para iPhone (web instalable) con:
 
 - **Calendario** para marcar si fuiste al gimnasio, qué rutina hiciste y qué grupos musculares entrenaste.
-- **Rutinas** con series, repeticiones y kilos, más una **biblioteca de ejercicios** con mapa muscular: toca un músculo del cuerpo (delante o detrás) y verás sus ejercicios. Cada ejercicio muestra las zonas que trabaja (principales y secundarias), cómo se hace, consejos y un botón para ver vídeos de la técnica en YouTube.
+- **Rutinas** con series, repeticiones y kilos, más una **biblioteca de ejercicios** con mapa muscular: toca un músculo del cuerpo (delante o detrás) y verás sus ejercicios. Cada ejercicio muestra las zonas que trabaja (principales y secundarias), cómo se hace, consejos y un botón para ver vídeos de la técnica en YouTube. El pecho está dividido en superior, medio e inferior.
+- **Creador automático de rutinas**: eliges duración, grupos musculares y material (barra, mancuernas, poleas…) y te monta una rutina equilibrada (básicos primero, luego aislamiento, cubriendo todas las zonas de cada músculo). Puedes cambiar cualquier ejercicio con 🔀, generar otra variante, empezar a entrenar o guardarla.
 - **Modo entrenar**: pulsa "Empezar entreno" en una rutina y ve marcando cada serie con sus kilos y repeticiones (se rellenan con lo de la última vez). Tiene cronómetro, temporizador de descanso con pitido y, al terminar, un resumen con tus nuevos récords. El día se marca solo en el calendario.
 - **Estadísticas** semanales, mensuales y anuales: días entrenados, asistencia, rachas, reparto por músculo, mapa de calor del año y **progreso por ejercicio** (récord, 1RM estimado y gráfica de cómo suben tus pesos).
 - **Nutrición**, con cinco formas de apuntar lo que comes:
@@ -12,6 +13,9 @@ App para iPhone (web instalable) con:
   - 🏷️ **Código de barras** de productos envasados: datos exactos de [Open Food Facts](https://world.openfoodfacts.org) (gratis, sin clave).
   - ↩️ **Repetir** una comida reciente con un toque.
   - ✍️ **A mano**, sin IA.
+  - ⭐ **Favoritas**: pulsa la estrella al revisar una comida y la tendrás a un toque.
+- **Puntuación de comidas** (A–E) según sus macros por gramo: proteína por caloría, densidad calórica (kcal/g) y proporción de grasa.
+- **Actividad**: apunta tus pasos del día y verás los km y las calorías quemadas, junto con la estimación de lo que quemas entrenando (también en el resumen del entreno y en el calendario).
 - **Peso** (en Nutrición → ⚖️ Peso): último peso, cambio a 7 y 30 días, ritmo en kg/semana, IMC, progreso hacia tu peso objetivo, gráfica (30 días a todo el historial) y composición corporal (grasa, músculo, agua, grasa visceral, hueso, metabolismo). Se importa de la báscula Xiaomi (ver sección 7).
 
 No necesita Mac, ni Xcode, ni cuenta de Apple Developer. Todos los datos se guardan en tu iPhone.
@@ -120,6 +124,8 @@ gymfit/
     ├── exercises.js    Lista de ejercicios, plantillas de rutinas
     ├── bodymap.js      Dibujo del cuerpo con los músculos (SVG)
     ├── workout.js      Modo entrenar e historial de pesos
+    ├── generator.js    Creador automático de rutinas
+    ├── energy.js       Calorías quemadas (pasos y entrenos)
     ├── stats.js        Pestaña Estadísticas
     ├── nutrition.js    Pestaña Nutrición y flujo de fotos
     ├── weight.js       Control de peso e importación de la báscula
@@ -140,6 +146,9 @@ gymfit/
 | Cambiar las plantillas de rutinas | `js/exercises.js` → `TEMPLATES` |
 | Cambiar cómo analiza la IA las fotos | `js/api.js` → `SYSTEM_PROMPT` |
 | Cambiar los tipos de comida | `js/nutrition.js` → `MEAL_TYPES` |
+| Cambiar cómo se puntúan las comidas | `js/nutrition.js` → `mealScore` |
+| Cambiar cómo se crean las rutinas | `js/generator.js` (`WEIGHT`, `ZONE_W`, `COMPOUND`) |
+| Ajustar el cálculo de calorías quemadas | `js/energy.js` |
 | Cambiar los datos de composición que se muestran | `js/weight.js` → `METRICS` |
 | Otro icono | `tools/make_icons.py` (cambia colores) y ejecuta `python tools/make_icons.py` |
 

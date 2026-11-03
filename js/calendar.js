@@ -5,6 +5,7 @@ import { db } from './db.js';
 import { openSheet, closeSheet } from './sheet.js';
 import { routineGroups } from './routines.js';
 import { sessionStats, fmtKg } from './workout.js';
+import { workoutKcal } from './energy.js';
 import {
   state, MUSCLES, M, MONTHS, WD_SHORT, keyOf, fromKey, today, fmtLong, cap,
   esc, toast, haptic, weekStreaks, ringGradient, startOfWeek, addDays,
@@ -160,7 +161,7 @@ function openDay(k) {
     ${sessions.map(s => {
       const st = sessionStats(s);
       return `<div class="wk-day"><span class="e">🏋️</span>
-        <div><b>${esc(s.name)}</b><small>${s.duration} min · ${s.items.length} ejercicios · ${st.sets} series · ${fmtKg(st.volume)} kg</small></div>
+        <div><b>${esc(s.name)}</b><small>${s.duration} min · ${s.items.length} ejercicios · ${st.sets} series · ${fmtKg(st.volume)} kg · ≈${Math.round(workoutKcal(s.duration))} kcal</small></div>
         <button class="icon-btn" data-delsess="${s.id}" aria-label="Borrar este entreno"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>`;
     }).join('')}

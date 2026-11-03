@@ -3,7 +3,7 @@
 // =========================================================
 
 const DB_NAME = 'gymfit';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 let dbPromise = null;
 
 function open() {
@@ -28,6 +28,12 @@ function open() {
       }
       if (!db.objectStoreNames.contains('weights')) {
         db.createObjectStore('weights', { keyPath: 'date' });   // una pesada por día
+      }
+      if (!db.objectStoreNames.contains('activity')) {
+        db.createObjectStore('activity', { keyPath: 'date' });  // pasos del día
+      }
+      if (!db.objectStoreNames.contains('favorites')) {
+        db.createObjectStore('favorites', { keyPath: 'id', autoIncrement: true });  // comidas favoritas
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -77,6 +83,17 @@ export const db = {
   putWeights: list => run('weights', 'readwrite', s => { list.forEach(w => s.put(w)); }),
   deleteWeight: date => run('weights', 'readwrite', s => s.delete(date)),
 
+  // Actividad diaria (pasos)
+  activityByDate: date => run('activity', 'readonly', s => s.get(date)),
+  allActivity: () => run('activity', 'readonly', s => s.getAll()),
+  putActivity: a => run('activity', 'readwrite', s => s.put(a)),
+  deleteActivity: date => run('activity', 'readwrite', s => s.delete(date)),
+
+  // Comidas favoritas
+  allFavorites: () => run('favorites', 'readonly', s => s.getAll()),
+  putFavorite: f => run('favorites', 'readwrite', s => s.put(f)),
+  deleteFavorite: id => run('favorites', 'readwrite', s => s.delete(id)),
+
   // Borrar todo
   async clearAll() {
     await run('workouts', 'readwrite', s => s.clear());
@@ -84,5 +101,7 @@ export const db = {
     await run('routines', 'readwrite', s => s.clear());
     await run('sessions', 'readwrite', s => s.clear());
     await run('weights', 'readwrite', s => s.clear());
+    await run('activity', 'readwrite', s => s.clear());
+    await run('favorites', 'readwrite', s => s.clear());
   },
 };

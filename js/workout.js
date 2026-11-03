@@ -9,6 +9,7 @@ import { openSheet, setSheetContent, closeSheet, onSheetCleanup } from './sheet.
 import { EX } from './exercises.js';
 import { PARTS, partColor } from './bodymap.js';
 import { mountLibrary, renderRoutines } from './routines.js';
+import { refreshBodyWeight, workoutKcal } from './energy.js';
 import { state, MUSCLES, keyOf, today, fromKey, esc, toast, haptic } from './utils.js';
 
 // El entreno en curso se guarda aquí a cada cambio, así no se pierde si cierras la hoja o la app
@@ -293,6 +294,8 @@ async function finishWorkout(s) {
   persist(null);
 
   const st = sessionStats(session);
+  await refreshBodyWeight();
+  const kcal = Math.round(workoutKcal(duration));
   const prs = items
     .map(i => ({ ex: i.ex, kg: Math.max(...i.sets.map(x => x.kg)) }))
     .filter(r => r.kg > 0 && prevBest[r.ex] && r.kg > prevBest[r.ex].kg);
@@ -304,7 +307,8 @@ async function finishWorkout(s) {
       <div><b>${items.length}</b><span>ejercicios</span></div>
       <div><b>${st.sets}</b><span>series</span></div>
       <div><b>${fmtKg(st.volume)}</b><span>kg totales</span></div>
-    </div></div>
+    </div>
+    <div class="burn-line">🔥 ≈ <b>${kcal}</b> kcal quemadas</div></div>
     ${prs.length ? `<div class="section-label">Nuevos récords</div>${prs.map(r => `<div class="alert pr"><span class="e">🏆</span><div><b>${esc(EX[r.ex].name)}</b>: ${fmtKg(r.kg)} kg <span class="muted">(antes ${fmtKg(prevBest[r.ex].kg)} kg)</span></div></div>`).join('')}` : ''}
     <div class="muted small" style="text-align:center;margin:10px 0 16px">Guardado en el calendario 📅</div>
     <button class="btn primary" id="wk-close">Cerrar</button>`, body => {
