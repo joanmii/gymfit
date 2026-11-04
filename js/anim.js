@@ -105,15 +105,21 @@ function solveFront(P) {
   };
   const shA = add(shC, mul(r, L.SW), mul(u, -2)), shB = add(shC, mul(r, -L.SW), mul(u, -2));
   const hpA = add(hip, mul(r, L.HW)), hpB = add(hip, mul(r, -L.HW));
-  const al = P.al ?? 1, eb = P.eb ?? 1;
+  const al = P.al ?? 1, alB = P.alB ?? al, eb = P.eb ?? 1;
   const [elA, haA] = ik(shA, P.ha, L.UA * al, L.FA * al, eb);
-  const [elB, haB] = ik(shB, P.hb || mirror(P.ha), L.UA * al, L.FA * al, P.ebB ?? -eb);
+  const [elB, haB] = ik(shB, P.hb || mirror(P.ha), L.UA * alB, L.FA * alB, P.ebB ?? -eb);
   const an = P.an || [hip[0] + 12, 4];
   const kb = P.kb ?? 1, tl = L.TH * (P.tll ?? 1);
-  const [knA, anA] = ik(hpA, an, tl, L.SH, kb);
-  const [knB, anB] = ik(hpB, P.bn || mirror(an), tl, L.SH, -kb);
+  let knA, anA, knB, anB;
+  if (P.kn) {                                     // rodillas puestas a mano (piernas hacia la cámara)
+    [knA, anA] = [P.kn, an];
+    [knB, anB] = [P.knB || mirror(P.kn), P.bn || mirror(an)];
+  } else {
+    [knA, anA] = ik(hpA, an, tl, L.SH, kb);
+    [knB, anB] = ik(hpB, P.bn || mirror(an), tl, L.SH, -kb);
+  }
   return {
-    front: true, t, u, r, len, hip, shC, shA, shB, hpA, hpB, elA, haA, elB, haB, knA, anA, knB, anB,
+    front: true, legsFront: !!P.legsFront, t, u, r, len, hip, shC, shA, shB, hpA, hpB, elA, haA, elB, haB, knA, anA, knB, anB,
     neck: add(shC, mul(u, L.NK - 2)),
     head: add(shC, mul(u, (P.tl ?? 1) < 0.7 ? 7 : L.NK + L.HR - 1)),
     ha: haA, ha2: haB, kn: knA, mid: mul(add(haA, haB), 0.5),
@@ -132,6 +138,23 @@ function lerpPose(a, b, k) {
   return out;
 }
 const ease = k => 0.5 - Math.cos(Math.PI * k) / 2;
+
+// Las manos relativas al hombro (hr/hr2) se pasan a posiciones absolutas en cada postura,
+// así se pueden mezclar con posturas que usan manos absolutas (ha/hb) al interpolar
+function normalize(A) {
+  if (A._norm || A.v === 'front') return A;
+  A.k = A.k.map(P => {
+    const t = P.t ?? 90;
+    const sh = P.sh0 || add(P.hip, dir(t, L.T + (P.su || 0)));
+    const Q = { ...P };
+    if (!Q.ha) Q.ha = add(sh, Q.hr || [2, -50]);
+    if (Q.hr2 && !Q.hb) Q.hb = add(add(sh, BACK), Q.hr2);
+    delete Q.hr; delete Q.hr2;
+    return Q;
+  });
+  A._norm = true;
+  return A;
+}
 
 function timing(A) {
   const segs = A.k.length - 1;
@@ -189,7 +212,7 @@ const SIDE_ZONES = {
 const torsoPt = (J, [a, c]) => add(J.hip, dir(J.t, a * J.len), mul(J.f, c));
 
 function drawSide(J, H) {
-  const c = (zone, back) => (H[zone] ? (back ? 'hb' : 'h') : (back ? 'b' : 'f'));
+  const c = (zone, back) => (H[zone] && !(back && H.one) ? (back ? 'hb' : 'h') : (back ? 'b' : 'f'));
   let s = '';
   // brazo y pierna del fondo
   s += line(J.hip2, J.kn2, 11, c('thigh', 1)) + line(J.kn2, J.an2, 9, c('calf', 1)) + line(J.heel2, J.toe2, 7, 'b');
@@ -220,13 +243,15 @@ const fPt = (J, [a, c]) => add(J.hip, mul(J.u, a * J.len), mul(J.r, c));
 
 function drawFront(J, H) {
   const c = zone => (H[zone] ? 'h' : 'f');
-  let s = '';
+  let s = '', legs = '';
   for (const [hp, kn, an, side] of [[J.hpA, J.knA, J.anA, 1], [J.hpB, J.knB, J.anB, -1]]) {
-    s += line(hp, kn, 11, c('thigh')) + line(kn, an, 9, c('calf')) + line(an, add(an, mul(J.r, 6 * side), [0, -1]), 7, 'f');
-    if (H.glute) s += dot(add(hp, mul(J.r, 3 * side)), 6.5, 'h');
+    legs += line(hp, kn, 11, c('thigh')) + line(kn, an, 9, c('calf')) + line(an, add(an, mul(J.r, 6 * side), mul(J.u, -1)), 7, 'f');
+    if (H.glute) legs += dot(add(hp, mul(J.r, 3 * side)), 6.5, 'h');
   }
+  if (!J.legsFront) s += legs;
   s += poly(TORSO_FRONT.map(p => fPt(J, p)), 'f');
   for (const z of ['chest', 'abs', 'upperback', 'trap']) if (H[z]) for (const zz of FRONT_ZONES[z]) s += poly(zz.map(p => fPt(J, p)), 'h');
+  if (J.legsFront) s += legs;
   s += line(J.shC, J.neck, 8, H.trap ? 'h' : 'f') + dot(J.head, L.HR, 'f');
   for (const [shp, el, ha] of [[J.shA, J.elA, J.haA], [J.shB, J.elB, J.haB]]) {
     s += line(shp, el, 8.5, c('upperarm')) + line(el, ha, 7, c('forearm')) + dot(ha, 4.3, 'f');
@@ -314,11 +339,13 @@ function frame(A, ms, H, vb) {
 function highlights(id, A) {
   const H = {};
   for (const m of A.hl || EX[id]?.p || []) if (REGION[m]) H[REGION[m]] = true;
+  if (A.one) H.one = true;          // ejercicio a una mano/pierna: el lado del fondo no se resalta
   return H;
 }
 
 // Encuadre: caja que ocupa la animación completa, con la proporción del dibujo
 function fit(A, H) {
+  normalize(A);
   BB = [Infinity, -Infinity, Infinity, -Infinity];
   const total = timing(A).half * 2;
   for (let i = 0; i < 48; i++) frame(A, (total * i) / 48, H, null);

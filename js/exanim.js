@@ -41,7 +41,7 @@ const declinePress = w => ({
 
 // Curl de pie (3 posturas para que la mano haga un arco)
 const curl = (w, extraProps = []) => ({
-  props: [...extraProps, { k: w, at: 'ha' }],
+  props: [...extraProps, { k: w, at: 'ha', ...(w === 'bar' ? { r: 10 } : {}) }],
   k: [stand({ hr: [3, -50] }), stand({ hr: [26, -26] }), stand({ hr: [12, -6] })],
 });
 
@@ -75,7 +75,7 @@ export const ANIMS = {
   'cruce-poleas-bajo': {
     v: 'front',
     props: [{ k: 'seg', p: [-88, 0, -88, 192] }, { k: 'seg', p: [88, 0, 88, 192] }, { k: 'cable', from: [84, 12], at: 'ha' }, { k: 'cable', from: [-84, 12], at: 'ha2' }],
-    k: [{ hip: [0, 86], ha: [44, 76] }, { hip: [0, 86], ha: [7, 146], al: 0.7, eb: -1 }],
+    k: [{ hip: [0, 86], ha: [44, 76] }, { hip: [0, 86], ha: [9, 128], al: 0.7, eb: -1 }],
   },
   'pec-deck': {
     v: 'front',
@@ -87,15 +87,15 @@ export const ANIMS = {
   },
   'flexiones': {
     k: [
-      { sh0: [-42, 54], t: 156.3, ha: [-45, 3], an: [80, 3], ft: -60, eb: 1 },
-      { sh0: [-50, 17], t: 173.3, ha: [-45, 3], an: [80, 3], ft: -60, eb: 1 },
+      { prone: true, sh0: [-42, 54], t: 156.3, ha: [-45, 3], an: [80, 3], ft: -60, eb: 1 },
+      { prone: true, sh0: [-50, 17], t: 173.3, ha: [-45, 3], an: [80, 3], ft: -60, eb: 1 },
     ],
   },
   'flexiones-declinadas': {
     props: [{ k: 'bench', p: [62, 38, 104, 38] }],
     k: [
-      { sh0: [-42, 54], t: 175.5, ha: [-45, 3], an: [89, 44], ft: -60, eb: 1 },
-      { sh0: [-50, 17], t: 191.3, ha: [-45, 3], an: [89, 44], ft: -60, eb: 1 },
+      { prone: true, sh0: [-42, 54], t: 175.5, ha: [-45, 3], an: [89, 44], ft: -60, eb: 1 },
+      { prone: true, sh0: [-50, 17], t: 191.3, ha: [-45, 3], an: [89, 44], ft: -60, eb: 1 },
     ],
   },
   'press-maquina': {
@@ -155,7 +155,7 @@ export const ANIMS = {
   },
   'encogimientos': {
     props: [{ k: 'db', at: 'ha' }],
-    k: [stand({ hr: [2, -51] }), stand({ hr: [2, -51], su: 8 })],
+    k: [stand({ hr: [2, -51] }), stand({ hr: [2, -51], su: 11 })],
   },
   'hiperextensiones': {
     props: [{ k: 'seg', p: [-52, 6, 6, 60], w: 5 }, { k: 'pad', at: [6, 62], r: 7 }, { k: 'pad', at: [-40, 22], r: 5 }],
@@ -187,14 +187,14 @@ export const ANIMS = {
   'pajaros': {
     v: 'front',
     props: [{ k: 'db', at: 'ha' }, { k: 'db', at: 'ha2' }],
-    k: [{ hip: [0, 80], tl: 0.45, an: [14, 4], ha: [12, 52] }, { hip: [0, 80], tl: 0.45, an: [14, 4], ha: [62, 96] }],
+    k: [{ hip: [0, 84], tl: 0.45, an: [12, 4], ha: [12, 56] }, { hip: [0, 84], tl: 0.45, an: [12, 4], ha: [62, 100] }],
   },
   'face-pull': {
     props: [{ k: 'seg', p: [100, 0, 100, 190] }, { k: 'cable', from: [96, 150], at: 'ha' }, { k: 'handle', at: 'ha' }],
     k: [stand({ hr: [48, 10] }), stand({ hr: [-2, 18], eb: 1 })],
   },
   'remo-menton': {
-    props: [{ k: 'bar', at: 'ha' }],
+    props: [{ k: 'bar', at: 'ha', r: 11 }],
     k: [stand({ hr: [4, -50], eb: 1 }), stand({ hr: [8, -5], eb: 1 })],
   },
 
@@ -211,7 +211,7 @@ export const ANIMS = {
     ],
   },
   'curl-predicador': {
-    props: [{ k: 'bench', p: [-36, 43, 6, 43] }, { k: 'seg', p: [-2, 90, 26, 62], w: 9 }, { k: 'seg', p: [22, 64, 22, 0], w: 3 }, { k: 'bar', at: 'ha' }],
+    props: [{ k: 'bench', p: [-36, 43, 6, 43] }, { k: 'seg', p: [-8, 92, 14, 73], w: 10 }, { k: 'seg', p: [10, 72, 10, 0], w: 3 }, { k: 'bar', at: 'ha', r: 10 }],
     k: [
       { hip: [-15, 49], t: 80, an: [22, 4], ha: [32, 64] },
       { hip: [-15, 49], t: 80, an: [22, 4], ha: [39, 86] },
@@ -219,11 +219,12 @@ export const ANIMS = {
     ],
   },
   'curl-concentrado': {
+    one: true,
     props: [{ k: 'bench', p: [-40, 43, 10, 43] }, { k: 'db', at: 'ha' }],
     k: [
-      { hip: [-10, 49], t: 55, an: [40, 4], ha: [26, 41] },
-      { hip: [-10, 49], t: 55, an: [40, 4], ha: [49, 68] },
-      { hip: [-10, 49], t: 55, an: [40, 4], ha: [24, 88] },
+      { hip: [-10, 49], t: 55, an: [40, 4], ha: [26, 41], hb: [24, 50] },
+      { hip: [-10, 49], t: 55, an: [40, 4], ha: [49, 68], hb: [24, 50] },
+      { hip: [-10, 49], t: 55, an: [40, 4], ha: [24, 88], hb: [24, 50] },
     ],
   },
   'curl-muneca': {
@@ -236,7 +237,7 @@ export const ANIMS = {
 
   // ---------- Tríceps ----------
   'press-frances': {
-    props: [FLAT, { k: 'bar', at: 'ha' }],
+    props: [FLAT, { k: 'bar', at: 'ha', r: 10 }],
     k: [
       { hip: [22, 49], t: 180, an: [60, 4], ha: [-35, 101] },
       { hip: [22, 49], t: 180, an: [60, 4], ha: [-54, 89] },
@@ -256,13 +257,14 @@ export const ANIMS = {
     k: [stand({ hr: [-5, 51] }), stand({ hr: [-28, 35] }), stand({ hr: [-19, 6] })],
   },
   'fondos-banco': {
-    props: [{ k: 'bench', p: [-62, 43, -24, 43] }],
+    props: [{ k: 'bench', p: [-74, 43, -33, 43] }],
     k: [
-      { sh0: [-25, 99], t: 92, ha: [-31, 47], an: [46, 4] },
-      { sh0: [-22, 76], t: 92, ha: [-31, 47], an: [46, 4] },
+      { sh0: [-28, 99], t: 92, ha: [-37, 47], an: [46, 4] },
+      { sh0: [-25, 76], t: 92, ha: [-37, 47], an: [46, 4] },
     ],
   },
   'patada-triceps': {
+    one: true,
     props: [{ k: 'bench', p: [30, 43, 80, 43] }, { k: 'db', at: 'ha' }],
     k: [
       { hip: [-25, 74], t: 15, an: [-14, 4], hb: [46, 46], ha: [-3, 53] },
@@ -278,8 +280,8 @@ export const ANIMS = {
   'plancha': {
     hold: 1400, dur: 1400,
     k: [
-      { sh0: [-40, 31], t: 167.3, ha: [-65, 4], an: [88, 3], ft: -70, eb: 1 },
-      { sh0: [-40, 32], t: 167.8, ha: [-65, 4], an: [88, 3], ft: -70, eb: 1 },
+      { prone: true, sh0: [-40, 31], t: 167.3, ha: [-65, 4], an: [88, 3], ft: -70, eb: 1 },
+      { prone: true, sh0: [-40, 32], t: 167.8, ha: [-65, 4], an: [88, 3], ft: -70, eb: 1 },
     ],
   },
   'elevacion-piernas': {
@@ -301,14 +303,15 @@ export const ANIMS = {
     v: 'front',
     props: [{ k: 'plate', at: 'mid' }],
     k: [
-      { hip: [0, 22], t: 84, tl: 0.85, an: [20, 6], tll: 0.5, ha: [36, 50], hb: [26, 46], al: 0.8, eb: -1, ebB: -1 },
-      { hip: [0, 22], t: 96, tl: 0.85, an: [20, 6], tll: 0.5, ha: [-26, 46], hb: [-36, 50], al: 0.8, eb: 1, ebB: 1 },
+      { hip: [0, 12], t: 82, tl: 0.9, legsFront: true, kn: [14, 36], an: [13, 12], ha: [38, 44], hb: [24, 40], al: 0.85, eb: -1, ebB: -1 },
+      { hip: [0, 12], t: 98, tl: 0.9, legsFront: true, kn: [14, 36], an: [13, 12], ha: [-24, 40], hb: [-38, 44], al: 0.85, eb: 1, ebB: 1 },
     ],
   },
   'plancha-lateral': {
+    v: 'front', hold: 900,
     k: [
-      { sh0: [-55, 31], t: 157, ha: [-62, 4], an: [86, 3], hr2: [40, -10], fal: 0.3, eb: 1 },
-      { sh0: [-55, 31], t: 168.7, ha: [-62, 4], an: [86, 3], hr2: [44, -6], fal: 0.3, eb: 1 },
+      { hip: [10, 21], t: 158, ha: [-29, 102], hb: [-40, 4], alB: 0.43, an: [92, 8], bn: [91, 3] },
+      { hip: [12, 30], t: 168, ha: [-32, 104], hb: [-38, 4], alB: 0.43, an: [92, 8], bn: [91, 3] },
     ],
   },
   'lenador-polea': {
@@ -368,8 +371,8 @@ export const ANIMS = {
   'curl-femoral': {
     props: [{ k: 'bench', p: [-60, 40, 60, 40] }, { k: 'pad', at: 'an', r: 6 }],
     k: [
-      { hip: [10, 46], t: 180, an: [90, 48], ha: [-64, 44], ft: 0, kb: -1 },
-      { hip: [10, 46], t: 180, an: [38, 84], ha: [-64, 44], ft: 0, kb: -1 },
+      { prone: true, hip: [10, 47], t: 180, an: [90, 49], ha: [-58, 34], eb: 1, ft: 0, kb: -1 },
+      { prone: true, hip: [10, 47], t: 180, an: [38, 85], ha: [-58, 34], eb: 1, ft: 0, kb: -1 },
     ],
   },
   'aductores-maquina': {
@@ -386,7 +389,7 @@ export const ANIMS = {
     props: [{ k: 'box', p: [-14, 0, 30, 14] }, { k: 'pad', at: 'sh', r: 7 }],
     k: [
       { hip: [-2, 96], t: 90, an: [-2, 14], ft: 20, hr: [14, -8] },
-      { hip: [-2, 108], t: 90, an: [-2, 26], ft: -50, hr: [14, -8] },
+      { hip: [-2, 110], t: 90, an: [-2, 28], ft: -62, hr: [14, -8] },
     ],
   },
   'gemelos-sentado': {
@@ -407,8 +410,8 @@ export const ANIMS = {
   },
   'puente-gluteo': {
     k: [
-      { sh0: [-40, 8], t: 180, an: [42, 4], ha: [2, 4] },
-      { sh0: [-40, 8], t: 205, an: [42, 4], ha: [2, 4] },
+      { sh0: [-40, 8], t: 180, an: [42, 4], ha: [12, 4] },
+      { sh0: [-40, 8], t: 205, an: [42, 4], ha: [12, 4] },
     ],
   },
   'patada-gluteo': {
