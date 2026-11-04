@@ -863,5 +863,11 @@ button.act:active { transform: scale(.98); }
 .item-units b { font-family: var(--rounded); font-size: 17px; color: var(--text); }
 
 .fav-types { margin: 0 0 10px; }
+.food-row .fstar { width: 32px; height: 32px; flex: none; display: grid; place-items: center; font-size: 22px; line-height: 1; color: var(--muted); }
+.food-row .fstar.on { color: #ffd60a; }
+.food-row .tagbtn { width: 32px; height: 32px; flex: none; display: grid; place-items: center; font-size: 17px; border-radius: 50%; opacity: .55; }
+.food-row .tagbtn.on { opacity: 1; background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.tag-editor { padding: 10px 12px 6px; margin: -2px 0 4px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.tag-editor .chips { margin: 8px 0 2px; }
 
 [hidden] { display: none !important; }

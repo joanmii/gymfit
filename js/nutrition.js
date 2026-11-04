@@ -11,7 +11,7 @@ import { ring, bars } from './charts.js';
 import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet, onSheetCleanup } from './sheet.js';
 import { refreshBodyWeight, hasBodyWeight, bodyKg, stepsKcal, stepsKm, dayWorkout } from './energy.js';
-import { state, hasAiKey, keyOf, today, addDays, fmtLong, cap, esc, r0, r1, toast, haptic, WD_SHORT } from './utils.js';
+import { state, saveSettings, hasAiKey, keyOf, today, addDays, fmtLong, cap, esc, r0, r1, toast, haptic, WD_SHORT } from './utils.js';
 
 const MEAL_TYPES = [
   { id: 'desayuno', name: 'Desayuno', emoji: '🥐' },
@@ -28,6 +28,22 @@ const TYPE = id => MEAL_TYPES.find(t => t.id === id) || MEAL_TYPES[1];
 let curType = 'comida';   // tipo de la comida que se está revisando
 const typesOf = f => f.types || (f.type ? [f.type] : null);
 const inType = (f, t = curType) => { const ts = typesOf(f); return !ts || ts.includes(t); };
+
+// Etiquetas de un plato: las de la lista (o las que cambiaste a mano) o, si es favorito, las suyas
+const ALL_TYPES = MEAL_TYPES.map(t => t.id);
+const dishTypes = r => r.id != null ? (typesOf(r) || ALL_TYPES) : (state.settings.dishTags?.[r.name] || r.types);
+async function setDishTypes(r, types) {
+  if (r.id != null) {
+    r.types = types;
+    delete r.type;
+    return db.putFavorite({ ...r });
+  }
+  const tags = { ...(state.settings.dishTags || {}) };
+  if (types.length === r.types.length && types.every(t => r.types.includes(t))) delete tags[r.name];
+  else tags[r.name] = types;
+  state.settings.dishTags = tags;
+  saveSettings();
+}
 
 // Marca o desmarca el favorito para el tipo `t`. Devuelve true si queda marcado.
 async function toggleFavType(rec, t, create, put, del) {
@@ -341,6 +357,7 @@ function openAddMenu(inPlace = false) {
       ${tile('gal', '🖼️', 'Galería', 'Foto que ya tengas', 'var(--orange)')}
     </div>
     <button class="action" data-a="man" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">✍️</span><b>Introducir a mano</b></button>
+    <button class="action" data-a="list" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">📋</span><b>Lista de alimentos</b></button>
     <div id="favs"></div>
     <div id="recent"></div>`, body => {
     body.addEventListener('click', e => {
@@ -350,6 +367,7 @@ function openAddMenu(inPlace = false) {
       if (a === 'txt') openDescribe();
       if (a === 'bar') openScanner(product => openReview(newDraft(productToDraft(product)), false, true));
       if (a === 'man') openReview(newDraft({ items: [blankItem()] }), false, true);
+      if (a === 'list') { pickerState.q = ''; pickerState.allMine = false; openFoodBrowser(); }
       const r = e.target.closest('[data-recent]');
       if (r) repeatMeal(recentCache[Number(r.dataset.recent)]);
       const f = e.target.closest('[data-fav]');
@@ -709,6 +727,8 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
       paintStar();
       paintItemStars();
       if (!body.querySelector('#picker').hidden && body.querySelector('#pk-q')) setPanel(true);
+      const dp = body.querySelector('#dishes');
+      if (dp && !dp.hidden) dp.repaint?.();
     });
 
     body.querySelector('#items').addEventListener('input', e => {
@@ -808,25 +828,66 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
       dishBtn.classList.toggle('open', open);
       dishBtn.querySelector('span').textContent = open ? 'Cerrar' : '🍳 Elegir un plato';
       if (!open) { dishPanel.innerHTML = ''; return; }
-      let list = [];
+      let list = [], qv = '', all = false, editing = -1;
       const box = freshBox(dishPanel);
       box.innerHTML = `
-        <input class="search" type="search" enterkeyhint="search" autocomplete="off" placeholder="Busca: tortilla, arroz con pollo…">
-        <div class="food-list" data-dl></div>`;
-      const paintDishes = qv => {
-        list = searchRecipes(qv);
-        box.querySelector('[data-dl]').innerHTML = list.length
-          ? list.map((r, i) => `
-            <button class="food-row" data-dish="${i}">
-              <span class="e">${r.emoji}</span>
-              <span class="n">${esc(r.name)}<small>${esc(r.items.slice(0, 4).map(x => shortName(x.name)).join(', '))}${r.items.length > 4 ? '…' : ''} · ${r0(r.kcal)} kcal</small></span>
-              <span class="plus">+</span>
-            </button>`).join('')
-          : '<div class="muted small" style="text-align:center;margin:10px 0">No hay ningún plato con ese nombre. Añade los alimentos uno a uno 👇</div>';
+        <input class="search" type="search" enterkeyhint="search" autocomplete="off" placeholder="Busca cualquier plato: tortilla, arroz con pollo…">
+        <div data-dl></div>`;
+      const dishRow = (r, i) => `
+        <button class="food-row" data-dish="${i}">
+          ${r.photo ? `<img src="${r.photo}" alt="">` : `<span class="e">${r.emoji || TYPE(typesOf(r)?.[0]).emoji}</span>`}
+          <span class="n">${esc(r.name)}<small>${esc(r.items.slice(0, 4).map(x => shortName(x.name)).join(', '))}${r.items.length > 4 ? '…' : ''} · ${r0(r.kcal)} kcal</small></span>
+          <span class="tagbtn ${editing === i ? 'on' : ''}" data-tags="${i}" role="button" aria-label="Cambiar en qué comidas aparece">🏷️</span>
+          <span class="plus">+</span>
+        </button>
+        ${editing === i ? tagEditor(r) : ''}`;
+      const tagEditor = r => {
+        const ts = dishTypes(r);
+        return `<div class="tag-editor">
+          <div class="muted small">¿En qué comidas quieres que aparezca?</div>
+          <div class="chips">${MEAL_TYPES.map(t => `<button class="chip ${ts.includes(t.id) ? 'on' : ''}" data-tt="${t.id}" style="--c:var(--accent)">${t.emoji} ${t.name}</button>`).join('')}</div>
+          <button class="link" data-tdone>Listo</button>
+        </div>`;
       };
-      paintDishes('');
-      box.querySelector('.search').addEventListener('input', e => paintDishes(e.target.value));
-      box.addEventListener('click', e => {
+      // Sin búsqueda: tus favoritos y los platos de este tipo de comida. Buscando: todos.
+      const paintDishes = () => {
+        const t = TYPE(draft.type);
+        const words = norm(qv).split(/\s+/).filter(Boolean);
+        const favs = favCache.filter(f => f.items?.length && (words.length ? words.every(w => norm(f.name).includes(w)) : all || inType(f, draft.type)));
+        const recs = searchRecipes(qv, all ? null : draft.type, dishTypes);
+        // Mientras editas las etiquetas de un plato, sigue en la lista aunque le quites esta comida
+        const ed = editing >= 0 ? list[editing] : null;
+        if (ed && !favs.includes(ed) && !recs.includes(ed)) (ed.id != null ? favs : recs).unshift(ed);
+        if (ed) editing = [...favs, ...recs].indexOf(ed);
+        list = [...favs, ...recs];
+        let i = 0;
+        const sec = (title, arr) => arr.length ? `<div class="label">${title}</div><div class="food-list">${arr.map(r => dishRow(r, i++)).join('')}</div>` : '';
+        const tail = words.length ? '' : `<button class="link" data-allp style="margin:8px 2px 0">${all ? `Ver solo los de ${t.name.toLowerCase()}` : 'Ver todos los platos'}</button>`;
+        box.querySelector('[data-dl]').innerHTML = list.length
+          ? sec('⭐ Tus platos favoritos', favs) + sec(words.length || all ? '🍳 Platos' : `🍳 Platos de ${t.name.toLowerCase()} ${t.emoji}`, recs) + tail
+          : (words.length ? '<div class="muted small" style="text-align:center;margin:10px 0">No hay ningún plato con ese nombre. Añade los alimentos uno a uno 👇</div>'
+            : `<div class="muted small" style="text-align:center;margin:10px 0">No hay platos de ${t.name.toLowerCase()}. Busca uno arriba.</div>${tail}`);
+      };
+      dishPanel.repaint = paintDishes;
+      paintDishes();
+      box.querySelector('.search').addEventListener('input', e => { qv = e.target.value; editing = -1; paintDishes(); });
+      box.addEventListener('click', async e => {
+        if (e.target.closest('[data-allp]')) { all = !all; editing = -1; return paintDishes(); }
+        // 🏷️ abre/cierra el editor de etiquetas de ese plato
+        const tb = e.target.closest('[data-tags]');
+        if (tb) { const i = Number(tb.dataset.tags); editing = editing === i ? -1 : i; haptic(); return paintDishes(); }
+        if (e.target.closest('[data-tdone]')) { editing = -1; return paintDishes(); }
+        const tt = e.target.closest('[data-tt]');
+        if (tt) {
+          const r = list[editing];
+          const ts = new Set(dishTypes(r));
+          ts.has(tt.dataset.tt) ? ts.delete(tt.dataset.tt) : ts.add(tt.dataset.tt);
+          if (!ts.size) return toast('Déjalo al menos en una comida');
+          await setDishTypes(r, ALL_TYPES.filter(t => ts.has(t)));
+          tt.classList.toggle('on', ts.has(tt.dataset.tt));
+          haptic();
+          return;
+        }
         const d = e.target.closest('[data-dish]');
         if (!d) return;
         const r = list[Number(d.dataset.dish)];
@@ -962,11 +1023,16 @@ const portionText = f => {
   const [label, g] = f.portions[0] || ['100 g', 100];
   return `${label === '100 g' ? '100 g' : `1 ${label} (${r0(g)} g)`} · ${r0(f.per100.kcal * g / 100)} kcal`;
 };
-const foodRow = (f, attr) => `
+const starSpan = f => {
+  const on = isFoodFav(f.name);
+  return `<span class="fstar ${on ? 'on' : ''}" data-star role="button" aria-label="${on ? 'Quitar de' : 'Guardar en'} favoritos">${on ? '★' : '☆'}</span>`;
+};
+const foodRow = (f, attr, browse = false) => `
   <button class="food-row" ${attr}>
     ${f.image ? `<img src="${esc(f.image)}" alt="" loading="lazy">` : `<span class="e">${f.emoji || '🍽️'}</span>`}
     <span class="n">${esc(f.name)}<small>${esc(portionText(f))}</small></span>
-    <span class="plus">+</span>
+    ${starSpan(f)}
+    ${browse ? '' : '<span class="plus">+</span>'}
   </button>`;
 
 // Producto de Open Food Facts → mismo formato que la base local
@@ -984,16 +1050,19 @@ function freshBox(el) {
   return box;
 }
 
+// ctx.browse = true: solo para ver la lista y marcar favoritos (tocar la fila marca/desmarca ☆)
 function mountFoodPicker(el, ctx) {
   const st = pickerState;
+  const browse = !!ctx.browse;
   let shown = [], mine = [], online = [];
   const box = freshBox(el);
+  const row = (f, attr) => foodRow(f, attr, browse);
 
   box.innerHTML = `
     <input class="search" id="pk-q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Busca: huevo, jamón, queso, café…" value="${esc(st.q)}">
-    <div class="pick-actions">
-      <button class="action" data-pk="scan" style="--c:color-mix(in srgb,var(--blue) 30%,transparent)"><span class="e">🏷️</span><div>Escanear<small>Código de barras</small></div></button>
-      <button class="action" data-pk="manual" style="--c:color-mix(in srgb,var(--muted) 22%,transparent)"><span class="e">✍️</span><div>En blanco<small>Pon tú los datos</small></div></button>
+    <div class="pick-actions" ${browse ? 'style="grid-template-columns:1fr"' : ''}>
+      <button class="action" data-pk="scan" style="--c:color-mix(in srgb,var(--blue) 30%,transparent)"><span class="e">🏷️</span><div>Escanear<small>${browse ? 'Guarda un envasado en favoritos' : 'Código de barras'}</small></div></button>
+      ${browse ? '' : `<button class="action" data-pk="manual" style="--c:color-mix(in srgb,var(--muted) 22%,transparent)"><span class="e">✍️</span><div>En blanco<small>Pon tú los datos</small></div></button>`}
     </div>
     <div data-pk-mine></div>
     <div class="label" data-pk-label>📋 Lista de alimentos</div>
@@ -1016,11 +1085,11 @@ function mountFoodPicker(el, ctx) {
     if (state === 'loading') onl.innerHTML = '<div class="online-load"><div class="spinner"></div>Buscando en Open Food Facts…</div>';
     if (state === 'error') onl.innerHTML = `<div class="notice err">${esc(msg)}</div>`;
     if (state === 'done') onl.innerHTML = online.length
-      ? `<div class="label">🌐 Productos de Open Food Facts</div><div class="food-list">${online.map((f, i) => foodRow(f, `data-on="${i}"`)).join('')}</div>`
+      ? `<div class="label">🌐 Productos de Open Food Facts</div><div class="food-list">${online.map((f, i) => row(f, `data-on="${i}"`)).join('')}</div>`
       : `<div class="muted small" style="text-align:center;margin:12px 0">No hay productos en internet para «${esc(query)}».</div>`;
   };
 
-  const paint = () => {
+  const paintMine = () => {
     const query = st.q.trim();
     const words = norm(query).split(/\s+/).filter(Boolean);
     // Mis alimentos: los de este tipo de comida (al buscar, todos los que coincidan)
@@ -1031,14 +1100,30 @@ function mountFoodPicker(el, ctx) {
     const more = !query && others
       ? `<button class="link" data-pk="allmine" style="margin:6px 2px 0">${st.allMine ? `Ver solo los de ${t.name.toLowerCase()}` : `Ver todos mis alimentos (${foodFavCache.length})`}</button>` : '';
     mineEl.innerHTML = mine.length
-      ? `${title}<div class="food-list">${mine.map((f, i) => foodRow(f, `data-mf="${i}"`)).join('')}</div>${more}`
-      : (query ? '' : `${title}<div class="hint-card">Aquí aparecerán tus alimentos de ${t.name.toLowerCase()}. Elige uno de la lista o escanea un envase y pulsa <b>☆</b> para guardarlo.</div>${more}`);
+      ? `${title}<div class="food-list">${mine.map((f, i) => row(f, `data-mf="${i}"`)).join('')}</div>${more}`
+      : (query ? '' : `${title}<div class="hint-card">Aquí aparecerán tus alimentos de ${t.name.toLowerCase()}. Pulsa <b>☆</b> en cualquier alimento de la lista (o escanea un envase) para guardarlo.</div>${more}`);
+  };
+  // Tras marcar/desmarcar: repinta Mis alimentos y las estrellas del resto sin perder la búsqueda en internet
+  const refreshStars = () => {
+    paintMine();
+    box.querySelectorAll('[data-pk-res] .food-row, [data-pk-online] .food-row').forEach(r => {
+      const f = rowFood(r);
+      if (f) r.querySelector('[data-star]').outerHTML = starSpan(f);
+    });
+  };
+  const rowFood = r => r.dataset.mf != null ? mine[Number(r.dataset.mf)]
+    : r.dataset.fi != null ? shown[Number(r.dataset.fi)]
+    : r.dataset.on != null ? online[Number(r.dataset.on)] : null;
+
+  const paint = () => {
+    const query = st.q.trim();
+    paintMine();
     // Lista general
     cats.hidden = !!query;
     shown = query ? searchFoods(query) : foodsByCat(st.cat);
     box.querySelector('[data-pk-label]').hidden = !!query && !shown.length;
     res.innerHTML = shown.length
-      ? shown.map((f, i) => foodRow(f, `data-fi="${i}"`)).join('')
+      ? shown.map((f, i) => row(f, `data-fi="${i}"`)).join('')
       : (mine.length ? '' : '<div class="muted small" style="text-align:center;margin:14px 0 4px">No está en la lista. Búscalo en internet o escanea el envase 👇</div>');
     online = [];
     paintOnline('idle');
@@ -1061,6 +1146,15 @@ function mountFoodPicker(el, ctx) {
       cats.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b === c));
       return paint();
     }
+    // ☆ de una fila (o la fila entera en la lista de favoritos)
+    const fr = e.target.closest('.food-row');
+    if (fr && (browse || e.target.closest('[data-star]'))) {
+      const f = rowFood(fr);
+      if (!f) return;
+      await toggleFoodFav(f);
+      haptic();
+      return refreshStars();
+    }
     const mf = e.target.closest('[data-mf]');
     if (mf) return mountPortion(el, mine[Number(mf.dataset.mf)], ctx);
     const fi = e.target.closest('[data-fi]');
@@ -1077,6 +1171,40 @@ function mountFoodPicker(el, ctx) {
         if (onl.isConnected) paintOnline('error', err.message);
       }
     }
+  });
+}
+
+// ---------- Lista de alimentos: ver la base y marcar favoritos por tipo de comida ----------
+function openFoodBrowser(type = defaultType()) {
+  curType = type;
+  setSheetContent(`
+    <button class="link back" data-back>${chev('l')} Volver</button>
+    <h2 class="sheet-title">Lista de alimentos</h2>
+    <div class="muted small">Toca un alimento para guardarlo (☆) en tus favoritos de:</div>
+    <div class="chips scroll" data-btypes style="margin:8px 0 12px">
+      ${MEAL_TYPES.map(t => `<button class="chip ${t.id === curType ? 'on' : ''}" data-bt="${t.id}" style="--c:var(--accent)">${t.emoji} ${t.name}</button>`).join('')}
+    </div>
+    <div data-browse></div>`, body => {
+    const host = body.querySelector('[data-browse]');
+    const ctx = {
+      browse: true,
+      // Escanear un envase lo guarda directamente en favoritos de este tipo
+      onScan: () => openScanner(async p => {
+        const f = productToFood(p);
+        if (!isFoodFav(f.name)) await toggleFoodFav(f); else toast(`${f.name} ya está en favoritos`);
+        openFoodBrowser(curType);
+      }, () => openFoodBrowser(curType)),
+    };
+    mountFoodPicker(host, ctx);
+    body.querySelector('[data-back]').addEventListener('click', () => openAddMenu(true));
+    body.querySelector('[data-btypes]').addEventListener('click', e => {
+      const b = e.target.closest('[data-bt]');
+      if (!b) return;
+      curType = b.dataset.bt;
+      body.querySelectorAll('[data-bt]').forEach(x => x.classList.toggle('on', x === b));
+      haptic();
+      mountFoodPicker(host, ctx);
+    });
   });
 }
 
