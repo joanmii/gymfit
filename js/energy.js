@@ -4,7 +4,7 @@
 // (sin contar lo que tu cuerpo gasta en reposo).
 // =========================================================
 import { db } from './db.js';
-import { state } from './utils.js';
+import { state, SP } from './utils.js';
 
 export const DEFAULT_KG = 75;          // si aún no has apuntado tu peso
 const WALK_KCAL_KG_KM = 0.5;           // caminar: ~0,5 kcal por kg y km (gasto neto)
@@ -36,8 +36,15 @@ export function stepsKcal(steps) {
 }
 
 // MET neto (se resta 1 MET, el reposo) × kg × horas
-export function workoutKcal(minutes) {
-  return (GYM_MET - 1) * bodyKg() * ((Number(minutes) || 0) / 60);
+export function workoutKcal(minutes, met = GYM_MET) {
+  return (met - 1) * bodyKg() * ((Number(minutes) || 0) / 60);
+}
+
+// Si el día fue solo cardio con deportes elegidos, usa la media de sus MET; si hubo pesas, la de gimnasio
+function dayMet(w) {
+  const sp = (w.sports || []).map(id => SP[id]?.met).filter(Boolean);
+  const onlyCardio = (w.groups || []).length && w.groups.every(g => g === 'cardio');
+  return onlyCardio && sp.length ? sp.reduce((a, b) => a + b, 0) / sp.length : GYM_MET;
 }
 
 // Entreno de un día según el calendario (la duración incluye los entrenos del modo entrenar)
@@ -46,5 +53,5 @@ export function dayWorkout(dateKey) {
   if (!w?.attended) return null;
   const assumed = !(w.duration > 0);
   const minutes = assumed ? GYM_DEFAULT_MIN : w.duration;
-  return { minutes, assumed, kcal: workoutKcal(minutes) };
+  return { minutes, assumed, kcal: workoutKcal(minutes, dayMet(w)) };
 }

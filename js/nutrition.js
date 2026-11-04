@@ -3,7 +3,9 @@
 // =========================================================
 import { db } from './db.js';
 import { analyzeFood, analyzeText } from './api.js';
-import { openScanner } from './barcode.js';
+import { openScanner, searchProducts } from './barcode.js';
+import { FOOD_CATS, searchFoods, foodsByCat, norm } from './foods.js';
+import { searchRecipes } from './recipes.js';
 import { renderWeight, openWeighIn } from './weight.js';
 import { ring, bars } from './charts.js';
 import { chev } from './calendar.js';
@@ -19,6 +21,25 @@ const MEAL_TYPES = [
   { id: 'snack',    name: 'Snack',    emoji: '🍫' },
 ];
 const MACRO_COLORS = { protein: '#0a84ff', carbs: '#ff9f0a', fat: '#ff375f' };
+const TYPE = id => MEAL_TYPES.find(t => t.id === id) || MEAL_TYPES[1];
+
+// ---------- Favoritos por tipo de comida ----------
+// Cada favorito guarda `types` (p. ej. ['desayuno']). Los antiguos sin `types` valen para todas.
+let curType = 'comida';   // tipo de la comida que se está revisando
+const typesOf = f => f.types || (f.type ? [f.type] : null);
+const inType = (f, t = curType) => { const ts = typesOf(f); return !ts || ts.includes(t); };
+
+// Marca o desmarca el favorito para el tipo `t`. Devuelve true si queda marcado.
+async function toggleFavType(rec, t, create, put, del) {
+  if (rec && inType(rec, t)) {
+    const ts = (typesOf(rec) || MEAL_TYPES.map(x => x.id)).filter(x => x !== t);
+    if (ts.length) await put({ ...rec, types: ts }); else await del(rec.id);
+    return false;
+  }
+  if (rec) await put({ ...rec, types: [...typesOf(rec), t] });
+  else await create([t]);
+  return true;
+}
 
 let root;
 let day = today();
@@ -91,7 +112,7 @@ export async function renderNutrition() {
     const d = addDays(from, i);
     const kc = sum(byDay[keyOf(d)] || []).kcal;
     const label = trend === 7 ? WD_SHORT[(d.getDay() + 6) % 7] : (i % 5 === 0 || i === trend - 1 ? String(d.getDate()) : '');
-    trendItems.push({ label, value: kc, highlight: +d === +today(), color: kc > S.kcal ? 'var(--danger)' : 'var(--accent)' });
+    trendItems.push({ label, value: kc, highlight: +d === +today(), color: kcalColor(kc, S.kcal) });
   }
   const loggedDays = Object.keys(byDay).length;
   const avg = loggedDays ? sum(trendMeals, loggedDays) : null;
@@ -110,7 +131,7 @@ export async function renderNutrition() {
 
     <div class="card nut-head">
       <div class="ring-wrap">
-        ${ring(tot.kcal, S.kcal, { size: 132, stroke: 14, color: over ? 'var(--danger)' : 'var(--accent)' })}
+        ${ring(tot.kcal, S.kcal, { size: 132, stroke: 14, color: kcalColor(tot.kcal, S.kcal) })}
         <div class="ring-center"><b>${r0(Math.abs(left))}</b><span>${over ? 'kcal de más' : 'kcal restantes'}</span></div>
       </div>
       <div class="macros">
@@ -177,6 +198,12 @@ const modeSeg = () => `
     <button data-nmode="comidas" class="${mode === 'comidas' ? 'on' : ''}">🍽️ Comidas</button>
     <button data-nmode="peso" class="${mode === 'peso' ? 'on' : ''}">⚖️ Peso</button>
   </div>`;
+
+// Verde: ±200 kcal del objetivo · Amarillo: entre 200 y 500 · Rojo: más de 500 por arriba o por abajo
+function kcalColor(kcal, goal) {
+  const diff = Math.abs(kcal - goal);
+  return diff <= 200 ? 'var(--accent)' : diff <= 500 ? 'var(--yellow)' : 'var(--danger)';
+}
 
 function macroBar(name, value, goal, color) {
   const pct = goal ? Math.min(100, (value / goal) * 100) : 0;
@@ -298,11 +325,13 @@ function sum(meals, divideBy = 1) {
 }
 
 // ---------- Añadir comida ----------
-function openAddMenu() {
+function openAddMenu(inPlace = false) {
+  pickerState.q = '';          // cada comida nueva empieza con el buscador vacío
+  pickerState.allMine = false;
   const tile = (a, emoji, title, sub, color) =>
-    `<button class="tile" data-a="${a}" style="--c:${color}"><span class="e">${emoji}</span><b>${title}</b><small>${sub}</small></button>`;
+    `<button class="tile" data-a="${a}" style="--c:${color}"><span class="e">${emoji}</span><b>${title}</b></button>`;
 
-  openSheet(`
+  (inPlace ? setSheetContent : openSheet)(`
     <h2 class="sheet-title">Añadir comida</h2>
     <div class="muted small">${+day === +today() ? 'Se guardará en el día de hoy' : `Se guardará el ${esc(fmtLong(day))}`}</div>
     <div class="tiles">
@@ -311,7 +340,7 @@ function openAddMenu() {
       ${tile('bar', '🏷️', 'Código de barras', 'Envasados exactos', 'var(--blue)')}
       ${tile('gal', '🖼️', 'Galería', 'Foto que ya tengas', 'var(--orange)')}
     </div>
-    <button class="action" data-a="man" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">✍️</span><div>Introducir a mano<small>Sin IA, tú pones los datos</small></div></button>
+    <button class="action" data-a="man" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">✍️</span><b>Introducir a mano</b></button>
     <div id="favs"></div>
     <div id="recent"></div>`, body => {
     body.addEventListener('click', e => {
@@ -324,7 +353,9 @@ function openAddMenu() {
       const r = e.target.closest('[data-recent]');
       if (r) repeatMeal(recentCache[Number(r.dataset.recent)]);
       const f = e.target.closest('[data-fav]');
-      if (f) repeatMeal(favCache[Number(f.dataset.fav)]);
+      if (f) repeatMeal(favCache[Number(f.dataset.fav)], favType);
+      const ft = e.target.closest('[data-ftype]');
+      if (ft) { favType = ft.dataset.ftype; haptic(); paintFavList(body.querySelector('#favs')); }
     });
     renderFavorites(body.querySelector('#favs'));
     renderRecent(body.querySelector('#recent'));
@@ -333,11 +364,18 @@ function openAddMenu() {
 
 const recentRow = (m, attr) => `
   <button class="recent" ${attr}>
-    ${m.photo ? `<img src="${m.photo}" alt="">` : `<span class="ph">${MEAL_TYPES.find(t => t.id === m.type)?.emoji || '🍽️'}</span>`}
+    ${m.photo ? `<img src="${m.photo}" alt="">` : `<span class="ph">${MEAL_TYPES.find(t => t.id === (m.type || m.types?.[0]))?.emoji || '🍽️'}</span>`}
     <span class="n">${esc(m.name)}</span>
     ${gradeBadge(mealScore(m))}
     <span class="k">${r0(m.kcal)} kcal</span>
   </button>`;
+
+// Desplegable (cerrado por defecto) para favoritas y recientes
+const fold = (title, count, inner) => `
+  <details class="fold">
+    <summary><span>${title}</span><span class="cnt">${count}</span>${chev('r')}</summary>
+    <div class="fold-body">${inner}</div>
+  </details>`;
 
 // ---------- Comidas favoritas ----------
 let favCache = [];
@@ -348,12 +386,27 @@ async function loadFavorites() {
   return favCache;
 }
 
+// Favoritos del menú «Añadir comida»: pestañas por tipo (empieza en el de la hora actual)
+let favType = 'comida';
 async function renderFavorites(el) {
   await loadFavorites();
   if (!el.isConnected) return;
-  el.innerHTML = `<div class="label">⭐ Favoritas</div>${favCache.length
-    ? `<div class="recent-list">${favCache.map((m, i) => recentRow(m, `data-fav="${i}"`)).join('')}</div>`
-    : '<div class="muted small" style="margin:0 2px">Al revisar una comida, pulsa ☆ para guardarla aquí y añadirla con un toque.</div>'}`;
+  favType = defaultType();
+  el.innerHTML = fold('⭐ Platos favoritos', favCache.length, favCache.length
+    ? `<div class="chips scroll fav-types">${MEAL_TYPES.map(t => {
+        const n = favCache.filter(f => inType(f, t.id)).length;
+        return `<button class="chip" data-ftype="${t.id}" style="--c:var(--accent)">${t.emoji} ${t.name}${n ? ` · ${n}` : ''}</button>`;
+      }).join('')}</div><div data-favlist></div>`
+    : '<div class="muted small" style="margin:0 2px">Al revisar una comida, pulsa ☆ para guardar el plato en los favoritos de ese desayuno, comida, cena…</div>');
+  if (favCache.length) paintFavList(el);
+}
+
+function paintFavList(el) {
+  el.querySelectorAll('[data-ftype]').forEach(b => b.classList.toggle('on', b.dataset.ftype === favType));
+  const list = favCache.map((m, i) => [m, i]).filter(([m]) => inType(m, favType));
+  el.querySelector('[data-favlist]').innerHTML = list.length
+    ? `<div class="recent-list">${list.map(([m, i]) => recentRow(m, `data-fav="${i}"`)).join('')}</div>`
+    : `<div class="muted small" style="margin:6px 2px 0">No tienes platos favoritos de ${TYPE(favType).name.toLowerCase()}. Al revisar una comida de ${TYPE(favType).name.toLowerCase()}, pulsa ☆ para guardarla aquí.</div>`;
 }
 
 // ---------- Comidas recientes (repetir con un toque) ----------
@@ -362,15 +415,15 @@ async function renderRecent(el) {
   const from = keyOf(addDays(today(), -45));
   const meals = (await db.mealsBetween(from, keyOf(today()))).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const seen = new Set();
-  recentCache = meals.filter(m => { const k = m.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
+  recentCache = meals.filter(m => { const k = m.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 10);
   if (!recentCache.length || !el.isConnected) return;
-  el.innerHTML = `<div class="label">Repetir una comida reciente</div>
-    <div class="recent-list">${recentCache.map((m, i) => recentRow(m, `data-recent="${i}"`)).join('')}</div>`;
+  el.innerHTML = fold('🕘 Recientes', recentCache.length,
+    `<div class="recent-list">${recentCache.map((m, i) => recentRow(m, `data-recent="${i}"`)).join('')}</div>`);
 }
 
-function repeatMeal(m) {
+function repeatMeal(m, type) {
   if (!m) return;
-  openReview(newDraft({ name: m.name, photo: m.photo, items: m.items.map(i => ({ ...i })) }), false, true);
+  openReview(newDraft({ name: m.name, photo: m.photo, items: m.items.map(i => ({ ...i })), ...(type ? { type } : {}) }), false, true);
 }
 
 // ---------- Describir por texto o voz ----------
@@ -495,7 +548,7 @@ async function startPhotoFlow(file) {
   let big, thumb;
   try {
     const img = await loadImage(file);
-    big = toJpeg(img, 1280, 0.8);    // para enviar a la IA
+    big = toJpeg(img, 1024, 0.78);   // para enviar a la IA (más pequeña = sube y se procesa antes)
     thumb = toJpeg(img, 480, 0.72);  // para guardar en el iPhone
   } catch {
     return toast('No he podido abrir la foto');
@@ -555,14 +608,17 @@ function withBase(item) {
   return { ...item, base: { grams: +item.grams || 0, kcal: +item.kcal || 0, protein: +item.protein || 0, carbs: +item.carbs || 0, fat: +item.fat || 0 } };
 }
 
+let pendingFood = null;   // producto escaneado desde el desplegable, para abrirlo al volver
+
 function openReview(draft, editing = false, fresh = false, inPlace = false) {
   draft.items = draft.items.map(withBase);
+  curType = draft.type;
   const conf = { low: 'Confianza baja · revisa las cantidades', medium: 'Confianza media', high: 'Confianza alta' };
 
   const render = () => `
     <div class="sheet-title-row">
       <h2 class="sheet-title">${editing ? 'Editar comida' : 'Revisa y guarda'}</h2>
-      <button class="icon-btn star" id="fav" aria-label="Guardar en favoritas">☆</button>
+      <button class="icon-btn star" id="fav" aria-label="Guardar plato en favoritos">☆</button>
     </div>
     <div class="review-top">
       ${draft.photo ? `<img src="${draft.photo}" alt="">` : ''}
@@ -573,9 +629,14 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
     <label class="field"><span>Tipo de comida</span>
       <select id="mtype">${MEAL_TYPES.map(t => `<option value="${t.id}" ${t.id === draft.type ? 'selected' : ''}>${t.emoji} ${t.name}</option>`).join('')}</select>
     </label>
+    ${editing ? '' : `
+    <div class="label">Platos</div>
+    <button class="btn secondary add-toggle" id="dish-toggle"><span>🍳 Elegir un plato</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    <div class="picker-panel" id="dishes" hidden></div>`}
     <div class="label">Alimentos</div>
-    <div id="items">${draft.items.map(itemCard).join('')}</div>
-    <button class="btn secondary" id="add-item">+ Añadir alimento</button>
+    <div id="items">${draft.items.length ? draft.items.map(itemCard).join('') : '<div class="hint-card">Aún no hay alimentos. Pulsa <b>Añadir alimento</b>.</div>'}</div>
+    <button class="btn secondary add-toggle" id="add-item"><span>＋ Añadir alimento</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    <div class="picker-panel" id="picker" hidden></div>
     <div class="label">Puntuación</div>
     <div class="card score-card" id="score"></div>
     ${editing ? '<button class="btn ghost danger" id="del">Borrar comida</button>' : ''}
@@ -614,31 +675,41 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
     const star = body.querySelector('#fav');
     const findFav = () => { const n = favKey(draft.name || buildMeal().name); return n ? favCache.find(f => favKey(f.name) === n) : null; };
     const paintStar = () => {
-      const on = !!findFav();
+      const f = findFav();
+      const on = !!f && inType(f, draft.type);
+      const tn = TYPE(draft.type).name.toLowerCase();
       star.classList.toggle('on', on);
       star.textContent = on ? '★' : '☆';
-      star.setAttribute('aria-label', on ? 'Quitar de favoritas' : 'Guardar en favoritas');
+      star.setAttribute('aria-label', on ? `Quitar de favoritos de ${tn}` : `Guardar en favoritos de ${tn}`);
     };
+    const paintItemStars = () => body.querySelectorAll('[data-ifav]').forEach(b => {
+      const on = isFoodFav(draft.items[Number(b.dataset.ifav)]?.name);
+      b.classList.toggle('on', on); b.textContent = on ? '★' : '☆';
+    });
     loadFavorites().then(() => { if (star.isConnected) paintStar(); });
+    loadFoodFavs().then(paintItemStars);
     star.addEventListener('click', async () => {
+      const m = buildMeal();
+      const t = TYPE(draft.type);
       const f = findFav();
-      if (f) {
-        await db.deleteFavorite(f.id);
-        toast('Quitada de favoritas');
-      } else {
-        const m = buildMeal();
-        if (!m.items.length) return toast('Añade al menos un alimento');
-        await db.putFavorite({ name: m.name, type: draft.type, photo: draft.photo || null, items: m.items,
-          kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat, createdAt: Date.now() });
-        toast('Guardada en favoritas ⭐');
-      }
+      if (!f && !m.items.length) return toast('Añade al menos un alimento');
+      const on = await toggleFavType(f, draft.type,
+        types => db.putFavorite({ name: m.name, types, photo: draft.photo || null, items: m.items,
+          kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat, createdAt: Date.now() }),
+        db.putFavorite, db.deleteFavorite);
+      toast(on ? `Guardado en favoritos de ${t.name.toLowerCase()} ${t.emoji}` : `Quitado de favoritos de ${t.name.toLowerCase()}`);
       haptic();
       await loadFavorites();
       paintStar();
     });
 
     body.querySelector('#mname').addEventListener('input', e => { draft.name = e.target.value; paintStar(); });
-    body.querySelector('#mtype').addEventListener('change', e => { draft.type = e.target.value; });
+    body.querySelector('#mtype').addEventListener('change', e => {
+      draft.type = curType = e.target.value;
+      paintStar();
+      paintItemStars();
+      if (!body.querySelector('#picker').hidden && body.querySelector('#pk-q')) setPanel(true);
+    });
 
     body.querySelector('#items').addEventListener('input', e => {
       const card = e.target.closest('[data-i]');
@@ -648,14 +719,7 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
       if (f === 'name') { it.name = e.target.value; return; }
       const v = parseFloat(String(e.target.value).replace(',', '.')) || 0;
       if (f === 'grams') {
-        it.grams = v;
-        if (it.base.grams > 0) {
-          const k = v / it.base.grams;
-          for (const key of ['kcal', 'protein', 'carbs', 'fat']) {
-            it[key] = key === 'kcal' ? r0(it.base[key] * k) : r1(it.base[key] * k);
-            card.querySelector(`[data-f="${key}"]`).value = it[key];
-          }
-        }
+        setItemGrams(it, card, v, false);
       } else {
         it[f] = v;
         it.base = { grams: +it.grams || 0, kcal: +it.kcal || 0, protein: +it.protein || 0, carbs: +it.carbs || 0, fat: +it.fat || 0 };
@@ -663,19 +727,128 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
       updateTotals();
     });
 
-    body.querySelector('#items').addEventListener('click', e => {
+    body.querySelector('#items').addEventListener('click', async e => {
+      // − / + en alimentos que van por unidades (huevos, lonchas, cucharadas…)
+      const ud = e.target.closest('[data-ud]');
+      if (ud) {
+        const card = ud.closest('[data-i]');
+        const it = draft.items[Number(card.dataset.i)];
+        let n = (+it.grams || 0) / it.unitG;
+        n = Number(ud.dataset.ud) > 0 ? Math.floor(n + 1e-6) + 1 : Math.ceil(n - 1e-6) - 1;
+        if (n < 1) n = 0.5;
+        setItemGrams(it, card, n * it.unitG, true);
+        haptic();
+        return updateTotals();
+      }
+      // ☆ en un alimento: guardarlo en Mis alimentos con sus valores por 100 g
+      const fb = e.target.closest('[data-ifav]');
+      if (fb) {
+        const it = draft.items[Number(fb.dataset.ifav)];
+        const g = +it.grams || 0;
+        if (!it.name.trim()) return toast('Ponle nombre al alimento');
+        if (!(g > 0) || !(+it.kcal > 0)) return toast('Indica gramos y kcal para guardarlo');
+        await loadFoodFavs();
+        const k = 100 / g;
+        await toggleFoodFav({ name: it.name, per100: { kcal: it.kcal * k, protein: it.protein * k, carbs: it.carbs * k, fat: it.fat * k },
+          portions: it.unitG ? [[it.unitLabel, it.unitG]] : [['ración', g]] });
+        haptic();
+        paintItemStars();
+        return;
+      }
       const del = e.target.closest('[data-del]');
       if (!del) return;
       draft.items.splice(Number(del.dataset.del), 1);
       setSheetContent(render(), mount);
     });
 
-    body.querySelector('#add-item').addEventListener('click', () => {
-      draft.items.push(withBase(blankItem()));
-      setSheetContent(render(), mount);
-      const inputs = document.querySelectorAll('.sheet [data-f="name"]');
-      inputs[inputs.length - 1]?.focus();
-    });
+    // Desplegable «Añadir alimento»
+    const panel = body.querySelector('#picker');
+    const toggleBtn = body.querySelector('#add-item');
+    const repaintItems = () => {
+      body.querySelector('#items').innerHTML = draft.items.map(itemCard).join('');
+      updateTotals();
+    };
+    const setPanel = (open, food = null) => {
+      panel.hidden = !open;
+      toggleBtn.classList.toggle('open', open);
+      toggleBtn.querySelector('span').textContent = open ? 'Cerrar' : '＋ Añadir alimento';
+      if (!open) { panel.innerHTML = ''; return; }
+      if (food) mountPortion(panel, food, pickCtx); else mountFoodPicker(panel, pickCtx);
+    };
+    const pickCtx = {
+      onPick: item => {
+        // Las filas vacías (sin nombre ni kcal) se sustituyen por el alimento elegido
+        draft.items = draft.items.filter(i => i.name.trim() || +i.kcal);
+        draft.items.push(withBase(item));
+        repaintItems();
+        setPanel(false);
+        toast(`${item.name} añadido`);
+        toggleBtn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      },
+      onManual: () => {
+        draft.items.push(withBase(blankItem()));
+        repaintItems();
+        setPanel(false);
+        const inputs = body.querySelectorAll('#items [data-f="name"]');
+        inputs[inputs.length - 1]?.focus();
+      },
+      // El escáner ocupa la hoja; al terminar se vuelve a esta comida con el producto abierto
+      onScan: () => openScanner(
+        product => { pendingFood = productToFood(product); openReview(draft, editing, false, true); },
+        () => openReview(draft, editing, false, true)),
+    };
+    toggleBtn.addEventListener('click', () => setPanel(panel.hidden));
+
+    // Desplegable «Elegir un plato»: pone el nombre y añade sus ingredientes
+    const dishBtn = body.querySelector('#dish-toggle');
+    const dishPanel = body.querySelector('#dishes');
+    const shortName = n => n.replace(/\s*\(.*\)$/, '').replace(/ \/.*$/, '');
+    const setDishPanel = open => {
+      dishPanel.hidden = !open;
+      dishBtn.classList.toggle('open', open);
+      dishBtn.querySelector('span').textContent = open ? 'Cerrar' : '🍳 Elegir un plato';
+      if (!open) { dishPanel.innerHTML = ''; return; }
+      let list = [];
+      const box = freshBox(dishPanel);
+      box.innerHTML = `
+        <input class="search" type="search" enterkeyhint="search" autocomplete="off" placeholder="Busca: tortilla, arroz con pollo…">
+        <div class="food-list" data-dl></div>`;
+      const paintDishes = qv => {
+        list = searchRecipes(qv);
+        box.querySelector('[data-dl]').innerHTML = list.length
+          ? list.map((r, i) => `
+            <button class="food-row" data-dish="${i}">
+              <span class="e">${r.emoji}</span>
+              <span class="n">${esc(r.name)}<small>${esc(r.items.slice(0, 4).map(x => shortName(x.name)).join(', '))}${r.items.length > 4 ? '…' : ''} · ${r0(r.kcal)} kcal</small></span>
+              <span class="plus">+</span>
+            </button>`).join('')
+          : '<div class="muted small" style="text-align:center;margin:10px 0">No hay ningún plato con ese nombre. Añade los alimentos uno a uno 👇</div>';
+      };
+      paintDishes('');
+      box.querySelector('.search').addEventListener('input', e => paintDishes(e.target.value));
+      box.addEventListener('click', e => {
+        const d = e.target.closest('[data-dish]');
+        if (!d) return;
+        const r = list[Number(d.dataset.dish)];
+        draft.name = r.name;
+        body.querySelector('#mname').value = r.name;
+        paintStar();
+        draft.items = draft.items.filter(i => i.name.trim() || +i.kcal);
+        r.items.forEach(i => draft.items.push(withBase({ ...i })));
+        repaintItems();
+        setDishPanel(false);
+        haptic();
+        toast(`${r.name}: ajusta las cantidades`);
+        body.querySelector('#items').scrollIntoView({ block: 'start', behavior: 'smooth' });
+      });
+    };
+    dishBtn?.addEventListener('click', () => setDishPanel(dishPanel.hidden));
+    if (pendingFood) {
+      const f = pendingFood;
+      pendingFood = null;
+      setPanel(true, f);
+      setTimeout(() => toggleBtn.scrollIntoView({ block: 'start', behavior: 'smooth' }), 350);
+    }
 
     body.querySelector('#del')?.addEventListener('click', async () => {
       if (!confirm('¿Borrar esta comida?')) return;
@@ -711,19 +884,290 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
   else openSheet(render(), mount);
 }
 
+// «2 unidades», «1,5 cucharadas», «3 lonchas»…
+function unitText(it) {
+  const n = Math.round((+it.grams || 0) / it.unitG * 10) / 10;
+  const [w, ...rest] = String(it.unitLabel || 'ración').split(' ');
+  const pl = n === 1 ? w : /ón$/.test(w) ? w.replace(/ón$/, 'ones') : /[aeiou]$/i.test(w) ? w + 's' : w + 'es';
+  return `<b>${String(n).replace('.', ',')}</b> ${esc([pl, ...rest].join(' '))}`;
+}
+
+// Cambia los gramos de un alimento escalando sus macros (y repinta su tarjeta)
+function setItemGrams(it, card, grams, writeGrams) {
+  it.grams = r1(grams);
+  if (writeGrams) card.querySelector('[data-f="grams"]').value = it.grams;
+  if (it.base.grams > 0) {
+    const k = it.grams / it.base.grams;
+    for (const key of ['kcal', 'protein', 'carbs', 'fat']) {
+      it[key] = key === 'kcal' ? r0(it.base[key] * k) : r1(it.base[key] * k);
+      card.querySelector(`[data-f="${key}"]`).value = it[key];
+    }
+  }
+  const ut = card.querySelector('[data-utext]');
+  if (ut) ut.innerHTML = unitText(it);
+}
+
 function itemCard(it, i) {
   const num = (f, label, step = '1') => `<label>${label}<input data-f="${f}" type="number" inputmode="decimal" step="${step}" min="0" value="${it[f]}"></label>`;
   return `<div class="card item" data-i="${i}">
     <div class="item-top">
       <input data-f="name" value="${esc(it.name)}" placeholder="Alimento">
+      <button class="icon-btn star ${isFoodFav(it.name) ? 'on' : ''}" data-ifav="${i}" aria-label="Guardar en mis alimentos">${isFoodFav(it.name) ? '★' : '☆'}</button>
       <button class="icon-btn" data-del="${i}" aria-label="Quitar alimento">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
+    ${it.unitG ? `<div class="item-units">
+      <button class="icon-btn" data-ud="-1" aria-label="Una menos">−</button>
+      <span data-utext>${unitText(it)}</span>
+      <button class="icon-btn" data-ud="1" aria-label="Una más">+</button>
+    </div>` : ''}
     <div class="item-grid">
       ${num('grams', 'Gramos')}${num('kcal', 'Kcal')}${num('protein', 'Prot.', '0.1')}${num('carbs', 'Hidr.', '0.1')}${num('fat', 'Grasa', '0.1')}
     </div>
   </div>`;
+}
+
+// ---------- Alimentos favoritos (valores por 100 g + sus raciones) ----------
+let foodFavCache = [];
+async function loadFoodFavs() {
+  foodFavCache = (await db.allFoodFavs()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  return foodFavCache;
+}
+const findFoodFav = name => { const k = favKey(name); return k ? foodFavCache.find(f => favKey(f.name) === k) : null; };
+
+const isFoodFav = name => { const f = findFoodFav(name); return !!f && inType(f); };
+
+// ☆ de un alimento: lo guarda (o quita) en Mis alimentos del tipo de comida actual
+async function toggleFoodFav(food) {
+  const t = TYPE(curType);
+  const on = await toggleFavType(findFoodFav(food.name), curType,
+    types => db.putFoodFav({
+      name: food.name.trim(), emoji: food.emoji || '⭐', image: food.image || null,
+      per100: food.per100,
+      portions: food.portions.filter(([l]) => l !== '100 g'),
+      types, createdAt: Date.now(),
+    }),
+    db.putFoodFav, db.deleteFoodFav);
+  await loadFoodFavs();
+  toast(on ? `Guardado en mis alimentos de ${t.name.toLowerCase()} ${t.emoji}` : `Quitado de mis alimentos de ${t.name.toLowerCase()}`);
+  return on;
+}
+
+// ---------- Desplegable «Añadir alimento» (dentro de la revisión de la comida) ----------
+// Se pinta dentro de `el`. ctx: { onPick(item), onManual(), onScan() }
+const pickerState = { q: '', cat: 'lacteos', allMine: false };
+
+const portionText = f => {
+  const [label, g] = f.portions[0] || ['100 g', 100];
+  return `${label === '100 g' ? '100 g' : `1 ${label} (${r0(g)} g)`} · ${r0(f.per100.kcal * g / 100)} kcal`;
+};
+const foodRow = (f, attr) => `
+  <button class="food-row" ${attr}>
+    ${f.image ? `<img src="${esc(f.image)}" alt="" loading="lazy">` : `<span class="e">${f.emoji || '🍽️'}</span>`}
+    <span class="n">${esc(f.name)}<small>${esc(portionText(f))}</small></span>
+    <span class="plus">+</span>
+  </button>`;
+
+// Producto de Open Food Facts → mismo formato que la base local
+const productToFood = p => ({
+  name: p.name, emoji: '🏷️', image: p.image, per100: p.per100,
+  portions: p.servingGrams ? [['ración del envase', p.servingGrams]] : [],
+});
+
+// Cada pantalla del desplegable usa un contenedor nuevo para no duplicar escuchadores
+function freshBox(el) {
+  el.innerHTML = '';
+  const box = document.createElement('div');
+  box.className = 'picker-box';
+  el.append(box);
+  return box;
+}
+
+function mountFoodPicker(el, ctx) {
+  const st = pickerState;
+  let shown = [], mine = [], online = [];
+  const box = freshBox(el);
+
+  box.innerHTML = `
+    <input class="search" id="pk-q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Busca: huevo, jamón, queso, café…" value="${esc(st.q)}">
+    <div class="pick-actions">
+      <button class="action" data-pk="scan" style="--c:color-mix(in srgb,var(--blue) 30%,transparent)"><span class="e">🏷️</span><div>Escanear<small>Código de barras</small></div></button>
+      <button class="action" data-pk="manual" style="--c:color-mix(in srgb,var(--muted) 22%,transparent)"><span class="e">✍️</span><div>En blanco<small>Pon tú los datos</small></div></button>
+    </div>
+    <div data-pk-mine></div>
+    <div class="label" data-pk-label>📋 Lista de alimentos</div>
+    <div class="chips scroll" data-pk-cats>
+      ${FOOD_CATS.map(c => `<button class="chip ${c.id === st.cat ? 'on' : ''}" data-cat="${c.id}" style="--c:var(--accent)">${c.emoji} ${c.name}</button>`).join('')}
+    </div>
+    <div class="food-list" data-pk-res></div>
+    <div data-pk-online></div>`;
+
+  const q = box.querySelector('#pk-q');
+  const res = box.querySelector('[data-pk-res]');
+  const onl = box.querySelector('[data-pk-online]');
+  const cats = box.querySelector('[data-pk-cats]');
+  const mineEl = box.querySelector('[data-pk-mine]');
+
+  const paintOnline = (state, msg = '') => {
+    const query = st.q.trim();
+    if (query.length < 2) { onl.innerHTML = ''; return; }
+    if (state === 'idle') onl.innerHTML = `<button class="btn secondary" data-pk="web" style="margin-top:10px">🌐 Buscar «${esc(query)}» en internet</button>`;
+    if (state === 'loading') onl.innerHTML = '<div class="online-load"><div class="spinner"></div>Buscando en Open Food Facts…</div>';
+    if (state === 'error') onl.innerHTML = `<div class="notice err">${esc(msg)}</div>`;
+    if (state === 'done') onl.innerHTML = online.length
+      ? `<div class="label">🌐 Productos de Open Food Facts</div><div class="food-list">${online.map((f, i) => foodRow(f, `data-on="${i}"`)).join('')}</div>`
+      : `<div class="muted small" style="text-align:center;margin:12px 0">No hay productos en internet para «${esc(query)}».</div>`;
+  };
+
+  const paint = () => {
+    const query = st.q.trim();
+    const words = norm(query).split(/\s+/).filter(Boolean);
+    // Mis alimentos: los de este tipo de comida (al buscar, todos los que coincidan)
+    const t = TYPE(curType);
+    const others = foodFavCache.filter(f => !inType(f)).length;
+    mine = foodFavCache.filter(f => (query || st.allMine || inType(f)) && words.every(w => norm(f.name).includes(w)));
+    const title = `<div class="label">⭐ Mis alimentos${query || st.allMine ? '' : ` · ${t.emoji} ${t.name}`}</div>`;
+    const more = !query && others
+      ? `<button class="link" data-pk="allmine" style="margin:6px 2px 0">${st.allMine ? `Ver solo los de ${t.name.toLowerCase()}` : `Ver todos mis alimentos (${foodFavCache.length})`}</button>` : '';
+    mineEl.innerHTML = mine.length
+      ? `${title}<div class="food-list">${mine.map((f, i) => foodRow(f, `data-mf="${i}"`)).join('')}</div>${more}`
+      : (query ? '' : `${title}<div class="hint-card">Aquí aparecerán tus alimentos de ${t.name.toLowerCase()}. Elige uno de la lista o escanea un envase y pulsa <b>☆</b> para guardarlo.</div>${more}`);
+    // Lista general
+    cats.hidden = !!query;
+    shown = query ? searchFoods(query) : foodsByCat(st.cat);
+    box.querySelector('[data-pk-label]').hidden = !!query && !shown.length;
+    res.innerHTML = shown.length
+      ? shown.map((f, i) => foodRow(f, `data-fi="${i}"`)).join('')
+      : (mine.length ? '' : '<div class="muted small" style="text-align:center;margin:14px 0 4px">No está en la lista. Búscalo en internet o escanea el envase 👇</div>');
+    online = [];
+    paintOnline('idle');
+  };
+  paint();
+  loadFoodFavs().then(() => { if (box.isConnected) paint(); });
+
+  let t;
+  q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { st.q = q.value; paint(); }, 120); });
+  q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); q.blur(); } });
+
+  box.addEventListener('click', async e => {
+    const act = e.target.closest('[data-pk]')?.dataset.pk;
+    if (act === 'manual') return ctx.onManual();
+    if (act === 'scan') return ctx.onScan();
+    if (act === 'allmine') { st.allMine = !st.allMine; return paint(); }
+    const c = e.target.closest('[data-cat]');
+    if (c) {
+      st.cat = c.dataset.cat;
+      cats.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b === c));
+      return paint();
+    }
+    const mf = e.target.closest('[data-mf]');
+    if (mf) return mountPortion(el, mine[Number(mf.dataset.mf)], ctx);
+    const fi = e.target.closest('[data-fi]');
+    if (fi) return mountPortion(el, shown[Number(fi.dataset.fi)], ctx);
+    const on = e.target.closest('[data-on]');
+    if (on) return mountPortion(el, online[Number(on.dataset.on)], ctx);
+    if (act === 'web') {
+      const query = st.q.trim();
+      paintOnline('loading');
+      try {
+        online = (await searchProducts(query)).map(productToFood);
+        if (st.q.trim() === query && onl.isConnected) paintOnline('done');
+      } catch (err) {
+        if (onl.isConnected) paintOnline('error', err.message);
+      }
+    }
+  });
+}
+
+// Elegir cantidad de un alimento: raciones típicas o gramos exactos. ☆ lo guarda en Mis alimentos
+function mountPortion(el, food, ctx) {
+  const portions = [...food.portions];
+  if (!portions.some(([, g]) => g === 100)) portions.push(['100 g', 100]);
+  let sel = 0, units = 1, grams = portions[0][1];
+  const p = food.per100;
+  const box = freshBox(el);
+
+  box.innerHTML = `
+    <div class="sheet-title-row">
+      <button class="link back" data-pk="back" style="margin:0 0 0 -6px">${chev('l')} Volver a la lista</button>
+      <button class="icon-btn star" data-pk="fav" aria-label="Guardar en mis alimentos">☆</button>
+    </div>
+    <div class="food-hero">
+      ${food.image ? `<img src="${esc(food.image)}" alt="">` : `<span class="e">${food.emoji || '🍽️'}</span>`}
+      <div><b>${esc(food.name)}</b><small>100 g: ${r0(p.kcal)} kcal · P ${r1(p.protein)} · H ${r1(p.carbs)} · G ${r1(p.fat)}</small></div>
+    </div>
+    <div class="chips" style="margin-top:12px">
+      ${portions.map(([l, g], i) => `<button class="chip" data-p="${i}" style="--c:var(--accent)">${l === '100 g' ? '100 g' : `${esc(cap(l))} · ${r0(g)} g`}</button>`).join('')}
+    </div>
+    <div class="qty-row">
+      <div class="stepper">
+        <button class="icon-btn" data-u="-1" aria-label="Menos">−</button>
+        <b data-units></b>
+        <button class="icon-btn" data-u="1" aria-label="Más">+</button>
+      </div>
+      <label class="grams"><input data-grams type="number" inputmode="decimal" min="0" step="1"><span>g</span></label>
+    </div>
+    <div class="totals-row" data-pv style="margin-top:14px"></div>
+    <button class="btn primary" data-pk="add" style="margin-top:14px">Añadir</button>`;
+
+  const gIn = box.querySelector('[data-grams]');
+  const star = box.querySelector('[data-pk="fav"]');
+  const paintStar = () => {
+    const on = isFoodFav(food.name);
+    star.classList.toggle('on', on);
+    star.textContent = on ? '★' : '☆';
+    star.setAttribute('aria-label', `${on ? 'Quitar de' : 'Guardar en'} mis alimentos de ${TYPE(curType).name.toLowerCase()}`);
+  };
+  loadFoodFavs().then(() => { if (star.isConnected) paintStar(); });
+
+  const paint = (fromGrams = false) => {
+    if (!fromGrams) gIn.value = r1(grams);
+    box.querySelectorAll('[data-p]').forEach(b => b.classList.toggle('on', Number(b.dataset.p) === sel));
+    box.querySelector('[data-units]').textContent = sel < 0 ? '–' : `${String(units).replace('.', ',')} ×`;
+    const k = grams / 100;
+    box.querySelector('[data-pv]').innerHTML = `
+      <div><b>${r0(p.kcal * k)}</b><span>kcal</span></div>
+      <div><b class="p-c">${r1(p.protein * k)}g</b><span>proteína</span></div>
+      <div><b class="c-c">${r1(p.carbs * k)}g</b><span>hidratos</span></div>
+      <div><b class="f-c">${r1(p.fat * k)}g</b><span>grasa</span></div>`;
+  };
+  paint();
+
+  box.addEventListener('click', async e => {
+    const act = e.target.closest('[data-pk]')?.dataset.pk;
+    if (act === 'back') return mountFoodPicker(el, ctx);
+    if (act === 'fav') {
+      // La ración elegida pasa a ser la primera (la que se propone al usarlo)
+      const chosen = sel >= 0 ? portions[sel] : ['ración', r0(grams)];
+      const rest = food.portions.filter(x => x !== chosen);
+      await toggleFoodFav({ ...food, portions: chosen[0] === '100 g' ? food.portions : [chosen, ...rest] });
+      haptic();
+      return paintStar();
+    }
+    const pb = e.target.closest('[data-p]');
+    if (pb) { sel = Number(pb.dataset.p); units = 1; grams = portions[sel][1]; haptic(); return paint(); }
+    const ub = e.target.closest('[data-u]');
+    if (ub) {
+      if (sel < 0) { sel = 0; units = 0.5; }
+      units = Math.max(0.5, units + 0.5 * Number(ub.dataset.u));
+      grams = units * portions[sel][1];
+      haptic();
+      return paint();
+    }
+    if (act === 'add') {
+      if (!(grams > 0)) return toast('Indica la cantidad');
+      const k = grams / 100;
+      haptic();
+      const unit = sel >= 0 && portions[sel][0] !== '100 g' ? { unitG: portions[sel][1], unitLabel: portions[sel][0] } : {};
+      ctx.onPick({ name: food.name, grams: r0(grams), kcal: r0(p.kcal * k), protein: r1(p.protein * k), carbs: r1(p.carbs * k), fat: r1(p.fat * k), ...unit });
+    }
+  });
+  gIn.addEventListener('input', () => {
+    grams = parseFloat(String(gIn.value).replace(',', '.')) || 0;
+    sel = -1;
+    paint(true);
+  });
 }
 
 // ---------- Imágenes ----------

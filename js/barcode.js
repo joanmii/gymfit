@@ -32,11 +32,13 @@ function makeReader(ZX) {
   return new ZX.BrowserMultiFormatReader(hints, 250);
 }
 
-// Abre el escáner. Cuando encuentra un producto llama a onProduct(producto)
-export function openScanner(onProduct) {
+// Abre el escáner. Cuando encuentra un producto llama a onProduct(producto).
+// onBack (opcional) muestra un botón para volver a la pantalla anterior
+export function openScanner(onProduct, onBack = null) {
   const liveOk = window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
 
   setSheetContent(`
+    ${onBack ? '<button class="link back" id="scan-back">‹ Volver</button>' : ''}
     <h2 class="sheet-title">Escanear código</h2>
     <div class="muted small">Apunta al código de barras del envase</div>
     ${liveOk ? `
@@ -63,13 +65,14 @@ export function openScanner(onProduct) {
 
     const stop = () => { try { reader?.reset(); } catch { /* nada */ } reader = null; };
     onSheetCleanup(stop);
+    body.querySelector('#scan-back')?.addEventListener('click', () => { done = true; stop(); onBack(); });
 
     const found = code => {
       if (done) return;
       done = true;
       stop();
       haptic();
-      searchProduct(code, onProduct);
+      searchProduct(code, onProduct, onBack);
     };
 
     // Buscar por número
@@ -120,7 +123,7 @@ export function openScanner(onProduct) {
   });
 }
 
-async function searchProduct(code, onProduct) {
+async function searchProduct(code, onProduct, onBack) {
   setSheetContent(`
     <div class="loading">
       <div class="loading-emoji">🏷️</div>
@@ -137,8 +140,10 @@ async function searchProduct(code, onProduct) {
       <div class="notice err">${esc(err.message)}</div>
       <div style="margin-top:18px">
         <button class="btn primary" id="again">Escanear otro</button>
+        ${onBack ? '<button class="btn secondary" id="back">Volver</button>' : ''}
       </div>`, body => {
-      body.querySelector('#again').addEventListener('click', () => openScanner(onProduct));
+      body.querySelector('#again').addEventListener('click', () => openScanner(onProduct, onBack));
+      body.querySelector('#back')?.addEventListener('click', onBack);
     });
   }
 }
@@ -156,11 +161,17 @@ export async function lookupBarcode(code) {
   if (!res.ok || data.status !== 1 || !data.product) {
     throw new Error(`El código ${code} no está en Open Food Facts. Puedes añadir la comida a mano o con una foto.`);
   }
-  const p = data.product;
+  const prod = parseProduct(data.product, code);
+  if (!prod) throw new Error('Este producto no tiene información nutricional. Añádelo a mano.');
+  return prod;
+}
+
+// Convierte un producto de Open Food Facts a nuestro formato (null si no trae kcal)
+function parseProduct(p, code = p.code) {
   const n = p.nutriments || {};
   let kcal = n['energy-kcal_100g'];
   if (kcal == null && n.energy_100g != null) kcal = n.energy_100g / 4.184;   // kJ → kcal
-  if (kcal == null) throw new Error('Este producto no tiene información nutricional. Añádelo a mano.');
+  if (kcal == null) return null;
 
   const name = (p.product_name_es || p.product_name || p.generic_name_es || 'Producto').trim();
   const brand = (p.brands || '').split(',')[0].trim();
@@ -178,4 +189,27 @@ export async function lookupBarcode(code) {
     servingGrams: serving > 0 && serving < 2000 ? Math.round(serving) : null,
     servingLabel: p.serving_size || null,
   };
+}
+
+// Busca productos por nombre en Open Food Facts (prioriza los vendidos en España).
+// Su buscador va a ratos saturado: prueba el servidor español y, si falla, el mundial.
+export async function searchProducts(query) {
+  const fields = 'code,product_name,product_name_es,generic_name_es,brands,nutriments,serving_quantity,serving_size,image_front_small_url';
+  const qs = `search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=25&fields=${fields}`;
+  let lastErr = new Error('Open Food Facts no responde ahora mismo. Prueba en un rato.');
+  for (const host of ['es', 'world']) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      const res = await fetch(`https://${host}.openfoodfacts.org/cgi/search.pl?${qs}`, { signal: ctrl.signal });
+      if (!res.ok) continue;
+      const data = await res.json();
+      return (data.products || []).map(p => parseProduct(p)).filter(p => p && p.name !== 'Producto');
+    } catch {
+      if (!navigator.onLine) lastErr = new Error('Sin conexión. Revisa tu internet e inténtalo de nuevo.');
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
 }

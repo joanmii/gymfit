@@ -163,6 +163,7 @@ async function exportData() {
     weights: await db.allWeights(),
     activity: await db.allActivity(),
     favorites: await db.allFavorites(),
+    foodFavs: await db.allFoodFavs(),
   };
   const name = `gymfit-${new Date().toISOString().slice(0, 10)}.json`;
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
@@ -184,7 +185,7 @@ async function importData(file) {
   try {
     const data = JSON.parse(await file.text());
     if (data.app !== 'gymfit') throw new Error('formato');
-    if (!confirm(`Importar ${data.workouts?.length || 0} días, ${data.sessions?.length || 0} entrenos registrados, ${data.routines?.length || 0} rutinas, ${data.meals?.length || 0} comidas, ${data.weights?.length || 0} pesadas y ${data.favorites?.length || 0} favoritas? Se combinarán con los datos actuales.`)) return;
+    if (!confirm(`Importar ${data.workouts?.length || 0} días, ${data.sessions?.length || 0} entrenos registrados, ${data.routines?.length || 0} rutinas, ${data.meals?.length || 0} comidas, ${data.weights?.length || 0} pesadas y ${(data.favorites?.length || 0) + (data.foodFavs?.length || 0)} favoritos? Se combinarán con los datos actuales.`)) return;
     for (const w of data.workouts || []) { await db.putWorkout(w); state.workouts.set(w.date, w); }
     for (const m of data.meals || []) await db.putMeal(m);
     for (const r of data.routines || []) await db.putRoutine(r);
@@ -194,6 +195,7 @@ async function importData(file) {
     if (data.weights?.length) await db.putWeights(data.weights);
     for (const a of data.activity || []) await db.putActivity(a);
     for (const f of data.favorites || []) await db.putFavorite(f);
+    for (const f of data.foodFavs || []) await db.putFoodFav(f);
     if (data.settings) { Object.assign(state.settings, data.settings); saveSettings(); }
     renderSettings();
     toast('Copia importada ✅');

@@ -36,7 +36,9 @@ async function post(url, headers, body) {
       e.busy = true;
       throw e;
     }
-    throw new Error(msg);
+    const e = new Error(msg);
+    e.status = res.status;
+    throw e;
   }
   return res.json();
 }
@@ -80,20 +82,39 @@ function parseResult(text) {
 
 // ---------- Gemini (gratis) ----------
 const GEMINI_FALLBACK = 'gemini-flash-lite-latest';
+const SLOW_KEY = 'gymfit-gemini-nofast';   // modelos que no aceptan desactivar el razonamiento
+const slowModels = () => { try { return JSON.parse(localStorage.getItem(SLOW_KEY) || '[]'); } catch { return []; } };
 
 async function gemini(parts, { json = true, maxTokens = 8192 } = {}) {
   const S = state.settings;
   const key = requireKey(S.geminiKey);
   const model = (S.geminiModel || 'gemini-flash-latest').trim();
-  const call = m => post(
+  const request = (m, fast) => post(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
     { 'x-goog-api-key': key },
     {
       systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
       contents: [{ role: 'user', parts }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) },
+      generationConfig: {
+        temperature: 0.2, maxOutputTokens: maxTokens,
+        ...(json ? { responseMimeType: 'application/json' } : {}),
+        // Sin «pensar» antes de responder: mucho más rápido y de sobra para estimar raciones
+        ...(fast ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      },
     }
   );
+  // Si un modelo no admite desactivar el razonamiento, se recuerda y se llama sin esa opción
+  const call = async m => {
+    const noFast = slowModels();
+    if (noFast.includes(m)) return request(m, false);
+    try {
+      return await request(m, true);
+    } catch (e) {
+      if (e.status !== 400 || !/think/i.test(e.message)) throw e;
+      try { localStorage.setItem(SLOW_KEY, JSON.stringify([...noFast, m])); } catch { /* nada */ }
+      return request(m, false);
+    }
+  };
   let data;
   try {
     data = await withRetry(() => call(model));

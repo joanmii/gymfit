@@ -17,6 +17,28 @@ export const MUSCLES = [
 ];
 export const M = Object.fromEntries(MUSCLES.map(m => [m.id, m]));
 
+// Tipos de cardio / deportes (met = gasto aproximado, Compendio de actividades físicas)
+export const SPORTS = [
+  { id: 'correr',     name: 'Correr',     emoji: '🏃', met: 9.8 },
+  { id: 'bici',       name: 'Bicicleta',  emoji: '🚴', met: 7.5 },
+  { id: 'natacion',   name: 'Natación',   emoji: '🏊', met: 7 },
+  { id: 'futbol',     name: 'Fútbol',     emoji: '⚽', met: 7 },
+  { id: 'baloncesto', name: 'Baloncesto', emoji: '🏀', met: 6.5 },
+  { id: 'padel',      name: 'Pádel',      emoji: '🎾', met: 6 },
+  { id: 'tenis',      name: 'Tenis',      emoji: '🎾', met: 7.3 },
+  { id: 'caminar',    name: 'Caminar',    emoji: '🚶', met: 3.5 },
+  { id: 'eliptica',   name: 'Elíptica',   emoji: '🏋️', met: 5 },
+  { id: 'remo',       name: 'Remo',       emoji: '🚣', met: 6 },
+  { id: 'otro',       name: 'Otro',       emoji: '🏅', met: 6 },
+];
+export const SP = Object.fromEntries(SPORTS.map(s => [s.id, s]));
+
+// Nombres de los deportes de un día («Fútbol», o lo que escribiste en «Otro»)
+export const sportNames = w => (w?.sports || []).map(id => id === 'otro' ? (w.sportOther?.trim() || 'Otro deporte') : SP[id]?.name).filter(Boolean);
+
+// Grupos de un día para mostrar: «Cardio» se sustituye por los deportes si los hay
+export const dayGroupNames = w => (w?.groups || []).flatMap(g => g === 'cardio' && w.sports?.length ? sportNames(w) : [M[g]?.name]).filter(Boolean);
+
 // Grupos principales sobre los que avisar si llevas tiempo sin entrenarlos
 export const NEGLECT_DAYS = 10;
 

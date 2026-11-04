@@ -8,7 +8,7 @@ import { sessionStats, fmtKg } from './workout.js';
 import { workoutKcal } from './energy.js';
 import {
   state, MUSCLES, M, MONTHS, WD_SHORT, keyOf, fromKey, today, fmtLong, cap,
-  esc, toast, haptic, weekStreaks, ringGradient, startOfWeek, addDays,
+  esc, toast, haptic, weekStreaks, ringGradient, startOfWeek, addDays, SPORTS, dayGroupNames,
 } from './utils.js';
 
 let root;
@@ -129,7 +129,7 @@ function todayCard(t) {
   if (w?.attended) {
     emoji = '💪'; title = 'Entreno de hoy registrado';
     const routine = state.routines.find(r => r.id === w.routine);
-    sub = [routine?.name, ...(w.groups || []).map(g => M[g]?.name)].filter(Boolean).join(' · ') || 'Entrenamiento';
+    sub = [routine?.name, ...dayGroupNames(w)].filter(Boolean).join(' · ') || 'Entrenamiento';
     dots = `<div class="today-dots">${(w.groups || []).map(g => `<i style="--c:${M[g]?.color}"></i>`).join('')}</div>`;
   } else if (w) {
     emoji = '😴'; title = 'Hoy toca descanso'; sub = 'Toca si quieres cambiarlo';
@@ -153,6 +153,7 @@ function openDay(k) {
     attended: existing ? existing.attended : null,
     groups: new Set(existing?.groups || []),
     routine: existing?.routine ?? null,
+    sports: new Set(existing?.sports || []),
   };
 
   const sessions = state.sessions.filter(s => s.date === k);
@@ -179,6 +180,15 @@ function openDay(k) {
       <div class="label">¿Qué has entrenado?</div>
       <div class="chips">
         ${MUSCLES.map(g => `<button class="chip ${draft.groups.has(g.id) ? 'on' : ''}" data-g="${g.id}" style="--c:${g.color}"><span class="dot"></span>${g.name}</button>`).join('')}
+      </div>
+      <div id="cardio-fields" ${draft.groups.has('cardio') ? '' : 'hidden'}>
+        <div class="label">¿Qué cardio has hecho?</div>
+        <div class="chips">
+          ${SPORTS.map(s => `<button class="chip ${draft.sports.has(s.id) ? 'on' : ''}" data-sp="${s.id}" style="--c:${M.cardio.color}">${s.emoji} ${s.name}</button>`).join('')}
+        </div>
+        <label class="field" id="other-field" ${draft.sports.has('otro') ? '' : 'hidden'}><span>¿Qué deporte?</span>
+          <input id="sport-other" type="text" autocomplete="off" placeholder="Ej: escalada, boxeo, voley…" value="${esc(existing?.sportOther || '')}">
+        </label>
       </div>
       <label class="field"><span>Duración (minutos)</span>
         <input id="dur" type="number" inputmode="numeric" min="0" placeholder="Opcional" value="${existing?.duration ?? ''}">
@@ -220,6 +230,7 @@ function openDay(k) {
         if (draft.routine) {
           routineGroups(state.routines.find(r => r.id === id)).forEach(g => draft.groups.add(g));
           body.querySelectorAll('[data-g]').forEach(b => b.classList.toggle('on', draft.groups.has(b.dataset.g)));
+          body.querySelector('#cardio-fields').hidden = !draft.groups.has('cardio');
         }
         haptic();
         return;
@@ -229,17 +240,34 @@ function openDay(k) {
         const g = chip.dataset.g;
         draft.groups.has(g) ? draft.groups.delete(g) : draft.groups.add(g);
         chip.classList.toggle('on', draft.groups.has(g));
+        if (g === 'cardio') body.querySelector('#cardio-fields').hidden = !draft.groups.has('cardio');
+        haptic();
+        return;
+      }
+      const sp = e.target.closest('[data-sp]');
+      if (sp) {
+        const id = sp.dataset.sp;
+        draft.sports.has(id) ? draft.sports.delete(id) : draft.sports.add(id);
+        sp.classList.toggle('on', draft.sports.has(id));
+        if (id === 'otro') {
+          body.querySelector('#other-field').hidden = !draft.sports.has('otro');
+          if (draft.sports.has('otro')) body.querySelector('#sport-other').focus();
+        }
         haptic();
         return;
       }
       if (e.target.closest('#save')) {
         if (draft.attended === null) return toast('Indica si has ido o no');
         const dur = parseInt(body.querySelector('#dur').value, 10);
+        const cardioOn = draft.attended && draft.groups.has('cardio');
         const record = {
           date: k,
           attended: draft.attended,
           groups: draft.attended ? MUSCLES.map(m => m.id).filter(id => draft.groups.has(id)) : [],
           routine: draft.attended ? draft.routine : null,
+          ...(cardioOn ? { sports: SPORTS.map(s => s.id).filter(id => draft.sports.has(id)) } : {}),
+          ...(cardioOn && draft.sports.has('otro') && body.querySelector('#sport-other').value.trim()
+            ? { sportOther: body.querySelector('#sport-other').value.trim() } : {}),
           duration: draft.attended && dur > 0 ? dur : null,
           notes: body.querySelector('#notes').value.trim(),
         };

@@ -3,7 +3,7 @@
 // =========================================================
 
 const DB_NAME = 'gymfit';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 let dbPromise = null;
 
 function open() {
@@ -34,6 +34,9 @@ function open() {
       }
       if (!db.objectStoreNames.contains('favorites')) {
         db.createObjectStore('favorites', { keyPath: 'id', autoIncrement: true });  // comidas favoritas
+      }
+      if (!db.objectStoreNames.contains('foodfavs')) {
+        db.createObjectStore('foodfavs', { keyPath: 'id', autoIncrement: true });   // alimentos favoritos (por 100 g)
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -94,6 +97,11 @@ export const db = {
   putFavorite: f => run('favorites', 'readwrite', s => s.put(f)),
   deleteFavorite: id => run('favorites', 'readwrite', s => s.delete(id)),
 
+  // Alimentos favoritos
+  allFoodFavs: () => run('foodfavs', 'readonly', s => s.getAll()),
+  putFoodFav: f => run('foodfavs', 'readwrite', s => s.put(f)),
+  deleteFoodFav: id => run('foodfavs', 'readwrite', s => s.delete(id)),
+
   // Borrar todo
   async clearAll() {
     await run('workouts', 'readwrite', s => s.clear());
@@ -103,5 +111,6 @@ export const db = {
     await run('weights', 'readwrite', s => s.clear());
     await run('activity', 'readwrite', s => s.clear());
     await run('favorites', 'readwrite', s => s.clear());
+    await run('foodfavs', 'readwrite', s => s.clear());
   },
 };

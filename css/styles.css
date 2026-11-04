@@ -17,6 +17,7 @@
   --accent-ink: #04210d;
   --blue: #0a84ff;
   --orange: #ff9f0a;
+  --yellow: #ffd60a;
   --pink: #ff375f;
   --purple: #bf5af2;
   --danger: #ff453a;
@@ -42,6 +43,7 @@
     --line: rgba(0, 0, 0, 0.08);
     --accent: #28b14c;
     --accent-ink: #ffffff;
+    --yellow: #f5b800;
     color-scheme: light;
   }
 }
@@ -143,7 +145,7 @@ h3 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
   font-size: 10.5px; font-weight: 600;
   transition: color .2s;
 }
-.tab svg { width: 25px; height: 25px; transition: transform .25s var(--spring); }
+.tab svg { width: 27px; height: 27px; transition: transform .25s var(--spring); }
 .tab.active { color: var(--accent); }
 .tab.active svg { transform: scale(1.08); }
 
@@ -791,3 +793,75 @@ button.act:active { transform: scale(.98); }
 .gen-presets { gap: 2px 6px; margin: -4px 0 8px -4px; }
 .gen-plan { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-left: 40px; }
 .gen-plan b { font-family: var(--rounded); font-size: 16px; }
+
+/* ---------- Desplegables (favoritas / recientes) ---------- */
+.fold { margin-top: 12px; background: var(--card); border-radius: 16px; overflow: hidden; }
+@media (prefers-color-scheme: dark) { .fold { background: var(--card2); } }
+.fold summary {
+  list-style: none; display: flex; align-items: center; gap: 8px;
+  padding: 14px 16px; font-size: 16px; font-weight: 650; cursor: pointer;
+}
+.fold summary::-webkit-details-marker { display: none; }
+.fold summary > span:first-child { flex: 1; }
+.fold summary .cnt { font-family: var(--rounded); font-size: 14px; font-weight: 700; color: var(--muted); }
+.fold summary svg { transition: transform .2s var(--spring); color: var(--muted); }
+.fold[open] summary svg { transform: rotate(90deg); }
+.fold-body { padding: 0 10px 10px; }
+.fold .recent { background: var(--card2); }
+@media (prefers-color-scheme: dark) { .fold .recent { background: var(--card3); } }
+
+/* ---------- Buscador de alimentos ---------- */
+.food-list { display: grid; gap: 8px; }
+.food-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  border: 0; border-radius: 14px; padding: 8px 12px 8px 8px; text-align: left;
+  background: var(--card); color: var(--text);
+  transition: transform .15s var(--spring);
+}
+@media (prefers-color-scheme: dark) { .food-row { background: var(--card2); } }
+.food-row:active { transform: scale(.98); }
+.food-row .e, .food-row img { width: 42px; height: 42px; border-radius: 10px; flex: none; display: grid; place-items: center; font-size: 22px; background: var(--card3); object-fit: cover; }
+.food-row .n { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; line-height: 1.25; }
+.food-row .n small { display: block; font-size: 12.5px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+.food-row .plus { width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 20px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.online-load { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--muted); font-size: 14px; padding: 6px 0 10px; }
+.online-load .spinner { margin: 6px auto; }
+
+.food-hero { display: flex; align-items: center; gap: 14px; margin: 4px 0 6px; }
+.food-hero .e, .food-hero img { width: 60px; height: 60px; border-radius: 16px; flex: none; display: grid; place-items: center; font-size: 32px; background: var(--card2); object-fit: cover; }
+.food-hero b { display: block; font-size: 20px; line-height: 1.2; }
+.food-hero small { display: block; font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+.qty-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper .icon-btn { width: 40px; height: 40px; font-size: 22px; font-weight: 700; color: var(--accent); }
+.stepper b { font-family: var(--rounded); font-size: 19px; min-width: 46px; text-align: center; }
+.qty-row .grams { flex: 1; display: flex; align-items: center; gap: 6px; background: var(--card2); border-radius: 12px; padding: 0 14px; }
+.qty-row .grams input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-family: var(--rounded); font-size: 20px; font-weight: 700; padding: 10px 0; text-align: right; color: var(--text); }
+.qty-row .grams span { color: var(--muted); font-weight: 650; }
+.pick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pick-actions .action { padding: 10px 12px; gap: 10px; font-size: 15px; }
+.pick-actions .action .e { width: 34px; height: 34px; font-size: 18px; border-radius: 10px; }
+.pick-actions .action small { font-size: 12px; }
+.hint-card { background: var(--card); border-radius: 14px; padding: 12px 14px; font-size: 14px; color: var(--muted); line-height: 1.4; margin-bottom: 10px; }
+@media (prefers-color-scheme: dark) { .hint-card { background: var(--card2); } }
+.hint-card b { color: var(--text); }
+
+.add-toggle { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.add-toggle svg { transition: transform .25s var(--spring); }
+.add-toggle.open svg { transform: rotate(180deg); }
+.picker-panel { margin-top: 10px; padding: 12px; border-radius: 18px; background: var(--card2); animation: viewIn .3s var(--spring); }
+@media (prefers-color-scheme: dark) { .picker-panel { background: var(--card3); } }
+.picker-panel .search, .picker-panel .food-row, .picker-panel .action, .picker-panel .hint-card, .picker-panel .chip:not(.on), .picker-panel .qty-row .grams { background: var(--card) !important; }
+@media (prefers-color-scheme: dark) { .picker-panel .search, .picker-panel .food-row, .picker-panel .action, .picker-panel .hint-card, .picker-panel .chip:not(.on), .picker-panel .qty-row .grams, .picker-panel .food-hero .e { background: var(--card2) !important; } }
+.picker-panel .chips.scroll { margin: 0 -12px 6px; padding: 0 12px 6px; }
+.picker-panel .label:first-child { margin-top: 4px; }
+
+.item-units { display: flex; align-items: center; gap: 10px; margin: 2px 0 8px; }
+.item-units .icon-btn { width: 32px; height: 32px; font-size: 20px; font-weight: 700; color: var(--accent); }
+.item-units span { font-size: 14px; color: var(--muted); }
+.item-units b { font-family: var(--rounded); font-size: 17px; color: var(--text); }
+
+.fav-types { margin: 0 0 10px; }
+
+[hidden] { display: none !important; }

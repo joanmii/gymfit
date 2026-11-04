@@ -288,6 +288,7 @@ async function finishWorkout(s) {
     routine: s.routine ?? prev?.routine ?? null,
     duration: (prev?.attended ? prev.duration || 0 : 0) + duration,
     notes: prev?.notes || '',
+    ...(prev?.attended && prev.sports ? { sports: prev.sports, sportOther: prev.sportOther } : {}),
   };
   await db.putWorkout(record);
   state.workouts.set(s.date, record);
