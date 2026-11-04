@@ -163,7 +163,7 @@ export async function renderNutrition() {
       <div class="act-grid">
         <button class="act" data-steps>
           <span class="e">👟</span>
-          <span class="t"><b>${steps ? steps.toLocaleString('es-ES') : 'Añadir pasos'}</b><small>${steps ? `pasos · ${r1(stepsKm(steps)).toLocaleString('es-ES')} km` : 'Toca para apuntarlos'}</small></span>
+          <span class="t"><b>${steps ? steps.toLocaleString('es-ES') : 'Añadir pasos'}</b><small>${stepsLine(steps)}</small>${stepsBar(steps)}</span>
           <span class="k">${steps ? `${r0(kSteps)}<small>kcal</small>` : '+'}</span>
         </button>
         <div class="act">
@@ -291,6 +291,22 @@ function scoreCard(s) {
 }
 
 // ---------- Pasos del día ----------
+const stepsGoal = () => +state.settings.stepsGoal || 0;
+// «6.200 / 8.000 pasos · 4,3 km» y barra de progreso hacia el objetivo
+function stepsLine(steps) {
+  const g = stepsGoal();
+  if (!steps) return g ? `Objetivo: ${g.toLocaleString('es-ES')} pasos` : 'Toca para apuntarlos';
+  const km = `${r1(stepsKm(steps)).toLocaleString('es-ES')} km`;
+  if (!g) return `pasos · ${km}`;
+  return steps >= g ? `🎯 ¡Objetivo cumplido! · ${km}` : `de ${g.toLocaleString('es-ES')} pasos · ${km}`;
+}
+function stepsBar(steps) {
+  const g = stepsGoal();
+  if (!g) return '';
+  const pct = Math.min(100, Math.round(steps / g * 100));
+  return `<i class="steps-bar${steps >= g ? ' done' : ''}"><i style="width:${pct}%"></i></i>`;
+}
+
 async function openSteps() {
   const k = keyOf(day);
   const current = (await db.activityByDate(k))?.steps || 0;
@@ -305,6 +321,7 @@ async function openSteps() {
       ${[1000, 2500, 5000].map(n => `<button class="chip" data-plus="${n}" style="--c:var(--accent)">+${n.toLocaleString('es-ES')}</button>`).join('')}
     </div>
     <div class="notice" id="steps-est">${est(current)}</div>
+    ${stepsGoal() ? `<div class="muted small" style="margin-top:8px">🎯 Tu objetivo: <b>${stepsGoal().toLocaleString('es-ES')} pasos</b> (cámbialo en Ajustes)</div>` : ''}
     <div class="muted small" style="margin-top:10px;line-height:1.45">Los tienes en la app <b>Salud</b> del iPhone → Explorar → Actividad → Pasos.
       La estimación usa tu peso (${r1(bodyKg()).toLocaleString('es-ES')} kg${hasBodyWeight() ? '' : ', por defecto'})${state.settings.height ? ' y tu altura' : ''}, y cuenta solo lo que gastas de más al caminar.</div>
     <div style="margin-top:18px">

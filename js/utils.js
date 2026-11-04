@@ -51,6 +51,7 @@ const DEFAULTS = {
   protein: 150,
   carbs: 230,
   fat: 70,
+  stepsGoal: 8000,                 // pasos al día (0 = sin objetivo)
   goalWeight: 0,                   // kg (0 = sin objetivo)
   height: 0,                       // cm, para calcular el IMC
   provider: 'gemini',              // 'gemini' (gratis) o 'claude' (de pago)

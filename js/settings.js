@@ -93,6 +93,11 @@ export function renderSettings() {
       ${row('fat', 'Grasa', 'g')}
     </div>
 
+    <div class="section-label">Actividad</div>
+    <div class="list">
+      ${row('stepsGoal', 'Objetivo de pasos diarios', 'pasos')}
+    </div>
+
     <div class="section-label">Peso</div>
     <div class="list">
       ${row('goalWeight', 'Peso objetivo', 'kg', true)}

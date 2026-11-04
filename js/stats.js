@@ -2,6 +2,7 @@
 // Pestaña Estadísticas
 // =========================================================
 import { bars, hbars, ring, heatmap } from './charts.js';
+import { db } from './db.js';
 import { chev } from './calendar.js';
 import { EX } from './exercises.js';
 import { progressBlock } from './workout.js';
@@ -147,6 +148,8 @@ export function renderStats() {
       ${groupRows.length ? hbars(groupRows) : `<div class="empty"><span class="e">📊</span><b>Sin datos todavía</b>Registra entrenos en el calendario.</div>`}
     </div>
 
+    <div class="card" id="steps-card"></div>
+
     ${period === 'year' ? `
     <div class="card">
       <div class="card-head"><h3>Tu año de un vistazo</h3></div>
@@ -166,6 +169,57 @@ export function renderStats() {
 
   const heat = root.querySelector('#heat');
   if (heat) heat.scrollLeft = heat.scrollWidth;
+  renderStepsCard(root.querySelector('#steps-card'), s, e);
+}
+
+// ---------- Pasos: evolución en el periodo elegido ----------
+const kSteps = v => (v >= 1000 ? `${(v / 1000).toFixed(1).replace('.', ',').replace(',0', '')}k` : String(Math.round(v)));
+
+async function renderStepsCard(el, s, e) {
+  const all = await db.allActivity();
+  if (!el.isConnected) return;
+  const from = keyOf(s), to = keyOf(e);
+  const byDay = new Map(all.filter(a => a.date >= from && a.date <= to && a.steps > 0).map(a => [a.date, a.steps]));
+  const goal = +state.settings.stepsGoal || 0;
+  const t = today();
+  const color = v => (!goal ? 'var(--orange)' : v >= goal ? 'var(--accent)' : 'var(--orange)');
+
+  let items, chartGoal = goal, unitNote = 'pasos al día';
+  if (period === 'week' || period === 'month') {
+    items = [];
+    let i = 0;
+    for (let d = new Date(s); d <= e; d = addDays(d, 1), i++) {
+      const v = byDay.get(keyOf(d)) || 0;
+      const label = period === 'week' ? WD_SHORT[i] : (i % 5 === 0 || +d === +e ? String(d.getDate()) : '');
+      items.push({ label, value: v, color: color(v), highlight: +d === +t, display: kSteps(v) });
+    }
+  } else {
+    unitNote = 'media diaria de cada mes';
+    items = MONTHS_SHORT.map((mn, mi) => {
+      const vals = [...byDay].filter(([k]) => fromKey(k).getMonth() === mi).map(([, v]) => v);
+      const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      return { label: mn.charAt(0).toUpperCase(), value: avg, color: color(avg), display: kSteps(avg),
+        highlight: s.getFullYear() === t.getFullYear() && mi === t.getMonth() };
+    });
+  }
+
+  const vals = [...byDay.values()];
+  const total = vals.reduce((a, b) => a + b, 0);
+  const avg = vals.length ? total / vals.length : 0;
+  const hit = goal ? vals.filter(v => v >= goal).length : 0;
+  const best = vals.length ? Math.max(...vals) : 0;
+
+  el.innerHTML = `
+    <div class="card-head"><h3>👟 Pasos</h3><span class="muted small">${unitNote}</span></div>
+    ${vals.length ? `
+    <div class="steps-kpis">
+      <div><b>${Math.round(avg).toLocaleString('es-ES')}</b><span>media diaria</span></div>
+      <div><b>${goal ? `${hit}/${vals.length}` : kSteps(best)}</b><span>${goal ? 'días con objetivo' : 'mejor día'}</span></div>
+      <div><b>${kSteps(total)}</b><span>pasos en total</span></div>
+    </div>
+    ${bars(items, { height: 150, goal: chartGoal || null, showValues: period !== 'month' })}
+    ${goal ? `<div class="muted small" style="margin-top:6px">Verde: cumpliste tu objetivo de ${goal.toLocaleString('es-ES')} pasos.</div>` : ''}`
+    : `<div class="empty"><span class="e">👟</span><b>Sin pasos en este periodo</b>Apúntalos en Nutrición → Actividad.</div>`}`;
 }
 
 // Evolución del peso en cada ejercicio (entrenos hechos en modo entrenar)
