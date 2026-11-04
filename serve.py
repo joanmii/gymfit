@@ -4,7 +4,7 @@ Servidor local para probar GymFit.
 Uso (desde la terminal de VS Code, dentro de la carpeta del proyecto):
     python serve.py
 
-- En el PC se abre automáticamente http://localhost:8000
+- En el PC se abre automáticamente http://localhost:8080
 - En el iPhone (misma WiFi) abre la dirección "En el iPhone" que aparece en la terminal.
   Si Windows pregunta por el firewall, pulsa "Permitir acceso" (red privada).
 """
@@ -14,7 +14,7 @@ import socket
 import sys
 import webbrowser
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 

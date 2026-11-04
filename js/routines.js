@@ -9,6 +9,7 @@ import { EXERCISES, EX, EQUIPMENT, TEMPLATES, videoUrl } from './exercises.js';
 import { startWorkout, openWorkout, getActive, progressBlock } from './workout.js';
 import { GEN_GROUPS, PRESETS, generateRoutine, swapExercise, estimateMinutes, routineName } from './generator.js';
 import { state, MUSCLES, M, esc, toast, haptic } from './utils.js';
+import { mountAnim, hasAnim } from './anim.js';
 
 const EQ_EMOJI = { barra: '🏋️', mancuernas: '💪', maquina: '⚙️', polea: '🔗', corporal: '🤸', kettlebell: '🔔' };
 
@@ -186,12 +187,15 @@ function openExercise(id) {
         ${ex.s.length ? `<div><span class="zone-tag s">Secundario</span>${zoneList(ex.s)}</div>` : ''}
       </div>
     </div>
-    <a class="btn secondary" href="${videoUrl(ex)}" target="_blank" rel="noopener">▶️ Ver vídeos de la técnica</a>
     ${prog ? `<div class="label">Tu progreso</div><div class="card">${prog}</div>` : ''}
     <div class="label">Cómo se hace</div>
     <div class="card"><ol class="steps">${ex.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol></div>
     ${ex.tips ? `<div class="notice">💡 ${esc(ex.tips)}</div>` : ''}
-    <button class="btn primary" id="add-to" style="margin-top:18px">Añadir a una rutina</button>`, body => {
+    ${hasAnim(id) ? '<div class="card ex-anim" id="ex-anim"></div>' : ''}
+    <a class="link" href="${videoUrl(ex)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:12px">¿Más dudas? Ver vídeos en YouTube</a>
+    <button class="btn primary" id="add-to" style="margin-top:14px">Añadir a una rutina</button>`, body => {
+    const anim = body.querySelector('#ex-anim');
+    if (anim) mountAnim(anim, id);
     body.querySelector('#add-to').addEventListener('click', () => chooseRoutine(id));
   });
 }
@@ -403,6 +407,7 @@ function showGenerated(opts, formHtml, formMount) {
             <button class="icon-btn" data-swap="${i}" aria-label="Cambiar por otro ejercicio">🔀</button>
           </div>
           <div class="gen-plan"><b>${it.sets} × ${esc(it.reps)}</b><button class="link" data-info="${it.ex}">▶️ Ver técnica</button></div>
+          <div class="ex-anim" data-anim="${it.ex}" hidden></div>
         </div>`;
       }).join('')}</div>
       <button class="btn primary" id="gen-start">▶ Empezar entreno ahora</button>
@@ -427,7 +432,16 @@ function showGenerated(opts, formHtml, formMount) {
         return setSheetContent(html(), mount);
       }
       const info = e.target.closest('[data-info]');
-      if (info) return window.open(videoUrl(EX[info.dataset.info]), '_blank', 'noopener');
+      if (info) {
+        const box = info.closest('.rt-item').querySelector('[data-anim]');
+        box.hidden = !box.hidden;
+        info.textContent = box.hidden ? '▶️ Ver técnica' : 'Ocultar técnica';
+        if (!box.hidden) {
+          if (hasAnim(box.dataset.anim)) mountAnim(box, box.dataset.anim);
+          else window.open(videoUrl(EX[box.dataset.anim]), '_blank', 'noopener');
+        } else box.innerHTML = '';
+        return;
+      }
       if (e.target.closest('#gen-start')) {
         closeSheet(true);
         return startWorkout({ id: null, name, items: plain() });

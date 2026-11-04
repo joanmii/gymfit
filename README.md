@@ -34,13 +34,13 @@ No necesita Mac, ni Xcode, ni cuenta de Apple Developer. Todos los datos se guar
 python serve.py
 ```
 
-Se abre `http://localhost:8000` en el navegador. Para verla con forma de móvil, pulsa **F12** y activa el modo dispositivo (icono de móvil/tablet) eligiendo "iPhone".
+Se abre `http://localhost:8080` en el navegador. Para verla con forma de móvil, pulsa **F12** y activa el modo dispositivo (icono de móvil/tablet) eligiendo "iPhone".
 
 Cada vez que guardes un cambio en VS Code, recarga la página.
 
 ## 3. Probarla en el iPhone (misma WiFi)
 
-Con `python serve.py` en marcha, la terminal muestra una línea `En el iPhone: http://192.168.x.x:8000`. Ábrela en Safari del iPhone.
+Con `python serve.py` en marcha, la terminal muestra una línea `En el iPhone: http://192.168.x.x:8080`. Ábrela en Safari del iPhone.
 
 - Si Windows pregunta por el firewall, pulsa **Permitir acceso** en redes privadas.
 - Así puedes probar todo, pero para instalarla de verdad (que funcione fuera de casa y sin conexión) publícala como en el paso 4.

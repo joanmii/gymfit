@@ -1,0 +1,421 @@
+// =========================================================
+// Posturas clave de cada ejercicio para la animación (anim.js)
+// Vista de lado mirando a la derecha (salvo v:'front'). y hacia arriba, suelo = 0.
+//   hip: cadera · t: ángulo del tronco (90 = de pie) · sh0: hombro fijo (en vez de cadera)
+//   ha/hb: mano (absoluta) · hr/hr2: mano relativa al hombro · an/an2: tobillos
+//   eb/kb: hacia dónde se doblan codos/rodillas (+1 / −1) · ual: brazo acortado (escorzo)
+//   arms: 'cross' (brazos cruzados) · 'back' (barra en la espalda) · 'rack' · 'goblet'
+// =========================================================
+
+const stand = (o = {}) => ({ hip: [0, 86], t: 90, an: [0, 4], ...o });
+
+// Bancos
+const FLAT = { k: 'bench', p: [-62, 43, 40, 43] };
+const INCL = [{ k: 'bench', p: [0, 43, 34, 43] }, { k: 'bench', p: [4, 45, -48, 82], legs: false }, { k: 'seg', p: [-30, 68, -30, 0], w: 3 }];
+const DECL = [{ k: 'bench', p: [36, 60, -58, 36], legs: false }, { k: 'seg', p: [-40, 40, -40, 0], w: 3 }, { k: 'seg', p: [24, 57, 24, 0], w: 3 }, { k: 'pad', at: [44, 49], r: 6 }];
+const SEAT = [{ k: 'bench', p: [-22, 43, 22, 43] }, { k: 'seg', p: [-14, 45, -20, 118], w: 7 }];
+const FLOOR_MAT = [];
+
+// Press tumbado en banco plano (barra o mancuernas)
+const benchPress = (w, extra = {}) => ({
+  props: [FLAT, { k: w, at: 'ha' }],
+  k: [
+    { hip: [22, 49], t: 180, an: [60, 4], ha: [-27, 102], ...extra.top },
+    { hip: [22, 49], t: 180, an: [60, 4], ha: [-25, 56], ual: 0.72, ...extra.bottom },
+  ],
+});
+const inclinePress = w => ({
+  props: [...INCL, { k: w, at: 'ha' }],
+  k: [
+    { hip: [12, 49], t: 145, an: [52, 4], ha: [-27, 130] },
+    { hip: [12, 49], t: 145, an: [52, 4], ha: [-23, 84], ual: 0.72 },
+  ],
+});
+const declinePress = w => ({
+  props: [...DECL, { k: w, at: 'ha' }],
+  k: [
+    { hip: [22, 65], t: 194, an: [50, 40], kb: 1, ha: [-24, 106] },
+    { hip: [22, 65], t: 194, an: [50, 40], kb: 1, ha: [-22, 60], ual: 0.72 },
+  ],
+});
+
+// Curl de pie (3 posturas para que la mano haga un arco)
+const curl = (w, extraProps = []) => ({
+  props: [...extraProps, { k: w, at: 'ha' }],
+  k: [stand({ hr: [3, -50] }), stand({ hr: [26, -26] }), stand({ hr: [12, -6] })],
+});
+
+export const ANIMS = {
+  // ---------- Pecho ----------
+  'press-banca': benchPress('bar'),
+  'press-inclinado': inclinePress('bar'),
+  'press-mancuernas': benchPress('db'),
+  'press-inclinado-mancuernas': inclinePress('db'),
+  'press-declinado': declinePress('bar'),
+  'press-declinado-mancuernas': declinePress('db'),
+  'press-cerrado': benchPress('bar'),
+  'aperturas': {
+    v: 'front', noGround: true,
+    props: [{ k: 'bench', p: [-70, 100, 30, 100], w: 22, legs: false }, { k: 'db', at: 'ha' }, { k: 'db', at: 'ha2' }],
+    k: [
+      { hip: [20, 100], t: 180, an: [104, 108], ha: [-26, 112], al: 0.45 },
+      { hip: [20, 100], t: 180, an: [104, 108], ha: [-24, 160], eb: -1 },
+    ],
+  },
+  'cruce-poleas': {
+    v: 'front',
+    props: [{ k: 'seg', p: [-88, 0, -88, 192] }, { k: 'seg', p: [88, 0, 88, 192] }, { k: 'cable', from: [82, 185], at: 'ha' }, { k: 'cable', from: [-82, 185], at: 'ha2' }],
+    k: [{ hip: [0, 86], ha: [52, 156] }, { hip: [0, 86], ha: [7, 84], al: 0.85, eb: -1 }],
+  },
+  'cruce-poleas-medio': {
+    v: 'front',
+    props: [{ k: 'seg', p: [-88, 0, -88, 192] }, { k: 'seg', p: [88, 0, 88, 192] }, { k: 'cable', from: [84, 128], at: 'ha' }, { k: 'cable', from: [-84, 128], at: 'ha2' }],
+    k: [{ hip: [0, 86], ha: [62, 128] }, { hip: [0, 86], ha: [6, 118], al: 0.6, eb: -1 }],
+  },
+  'cruce-poleas-bajo': {
+    v: 'front',
+    props: [{ k: 'seg', p: [-88, 0, -88, 192] }, { k: 'seg', p: [88, 0, 88, 192] }, { k: 'cable', from: [84, 12], at: 'ha' }, { k: 'cable', from: [-84, 12], at: 'ha2' }],
+    k: [{ hip: [0, 86], ha: [44, 76] }, { hip: [0, 86], ha: [7, 146], al: 0.7, eb: -1 }],
+  },
+  'pec-deck': {
+    v: 'front',
+    props: [{ k: 'seg', p: [0, 40, 0, 175], w: 6 }, { k: 'bench', p: [-24, 46, 24, 46] }],
+    k: [
+      { hip: [0, 52], tll: 0.3, an: [16, 4], ha: [46, 160], eb: 1 },
+      { hip: [0, 52], tll: 0.3, an: [16, 4], ha: [9, 150], al: 0.45, eb: 1 },
+    ],
+  },
+  'flexiones': {
+    k: [
+      { sh0: [-42, 54], t: 156.3, ha: [-45, 3], an: [80, 3], ft: -60, eb: 1 },
+      { sh0: [-50, 17], t: 173.3, ha: [-45, 3], an: [80, 3], ft: -60, eb: 1 },
+    ],
+  },
+  'flexiones-declinadas': {
+    props: [{ k: 'bench', p: [62, 38, 104, 38] }],
+    k: [
+      { sh0: [-42, 54], t: 175.5, ha: [-45, 3], an: [89, 44], ft: -60, eb: 1 },
+      { sh0: [-50, 17], t: 191.3, ha: [-45, 3], an: [89, 44], ft: -60, eb: 1 },
+    ],
+  },
+  'press-maquina': {
+    props: [...SEAT, { k: 'seg', p: [62, 0, 62, 150], w: 6 }, { k: 'handle', at: 'ha' }],
+    k: [{ hip: [0, 50], t: 98, an: [40, 4], ha: [4, 96], ual: 0.7 }, { hip: [0, 50], t: 98, an: [40, 4], ha: [46, 99] }],
+  },
+  'press-inclinado-maquina': {
+    props: [...SEAT, { k: 'seg', p: [62, 0, 62, 170], w: 6 }, { k: 'handle', at: 'ha' }],
+    k: [{ hip: [0, 50], t: 98, an: [40, 4], ha: [4, 100], ual: 0.7 }, { hip: [0, 50], t: 98, an: [40, 4], ha: [36, 132] }],
+  },
+  'fondos-paralelas': {
+    props: [{ k: 'seg', p: [0, 0, 0, 104], w: 5 }, { k: 'pad', at: [0, 104], r: 4 }],
+    k: [
+      { sh0: [3, 155], t: 80, ha: [0, 105], an: [-38, 50] },
+      { sh0: [3, 128], t: 64, ha: [0, 105], an: [-50, 32] },
+    ],
+  },
+
+  // ---------- Espalda ----------
+  'dominadas': {
+    props: [{ k: 'seg', p: [-40, 188, 40, 188], w: 3 }, { k: 'pad', at: [0, 188], r: 4 }],
+    k: [
+      { sh0: [0, 135], t: 90, ha: [0, 187], an: [-22, 12] },
+      { sh0: [-3, 172], t: 94, ha: [0, 187], an: [-20, 52], ual: 0.6 },
+    ],
+  },
+  'jalon-pecho': {
+    props: [...SEAT, { k: 'pad', at: [26, 64], r: 6 }, { k: 'cable', from: [-2, 196], at: 'ha' }, { k: 'handle', at: 'ha' }],
+    k: [{ hip: [0, 50], t: 100, an: [38, 4], ha: [-3, 150] }, { hip: [0, 50], t: 104, an: [38, 4], ha: [6, 104], ual: 0.8 }],
+  },
+  'remo-barra': {
+    props: [{ k: 'bar', at: 'ha' }],
+    k: [{ hip: [-22, 74], t: 40, an: [0, 4], hr: [0, -50] }, { hip: [-22, 74], t: 40, an: [0, 4], ha: [-2, 78] }],
+  },
+  'remo-mancuerna': {
+    props: [{ k: 'bench', p: [-72, 43, 40, 43] }, { k: 'db', at: 'ha' }],
+    k: [
+      { hip: [-25, 86], t: 0, an: [-25, 4], an2: [-62, 47], ft2: 180, hb: [27, 47], ha: [28, 36] },
+      { hip: [-25, 86], t: 0, an: [-25, 4], an2: [-62, 47], ft2: 180, hb: [27, 47], ha: [0, 84] },
+    ],
+  },
+  'remo-polea': {
+    props: [{ k: 'bench', p: [-42, 23, 0, 23] }, { k: 'seg', p: [64, 8, 64, 46], w: 5 }, { k: 'cable', from: [84, 30], at: 'ha' }, { k: 'handle', at: 'ha' }],
+    k: [{ hip: [-20, 29], t: 90, an: [56, 26], ha: [30, 80] }, { hip: [-20, 29], t: 95, an: [56, 26], ha: [-8, 66] }],
+  },
+  'peso-muerto': {
+    props: [{ k: 'bar', at: 'ha', r: 14 }],
+    k: [{ hip: [-30, 48], t: 28, an: [0, 4], hr: [0, -51] }, stand({ hr: [3, -50] })],
+  },
+  'pullover-polea': {
+    props: [{ k: 'cable', from: [70, 196], at: 'ha' }, { k: 'handle', at: 'ha' }],
+    k: [
+      { hip: [-6, 85], t: 80, an: [0, 4], ha: [40, 172] },
+      { hip: [-6, 85], t: 80, an: [0, 4], ha: [54, 128] },
+      { hip: [-6, 85], t: 80, an: [0, 4], ha: [12, 88] },
+    ],
+  },
+  'encogimientos': {
+    props: [{ k: 'db', at: 'ha' }],
+    k: [stand({ hr: [2, -51] }), stand({ hr: [2, -51], su: 8 })],
+  },
+  'hiperextensiones': {
+    props: [{ k: 'seg', p: [-52, 6, 6, 60], w: 5 }, { k: 'pad', at: [6, 62], r: 7 }, { k: 'pad', at: [-40, 22], r: 5 }],
+    k: [{ hip: [13, 72], t: -55, an: [-45, 14], arms: 'cross' }, { hip: [13, 72], t: 45, an: [-45, 14], arms: 'cross' }],
+  },
+
+  // ---------- Hombros ----------
+  'press-militar': {
+    props: [{ k: 'bar', at: 'ha' }],
+    k: [stand({ hr: [9, 4] }), stand({ hr: [-2, 52] })],
+  },
+  'press-hombro-mancuernas': {
+    props: [...SEAT, { k: 'db', at: 'ha' }],
+    k: [{ hip: [0, 50], t: 95, an: [40, 4], hr: [3, 14], ual: 0.55 }, { hip: [0, 50], t: 95, an: [40, 4], hr: [0, 51] }],
+  },
+  'press-arnold': {
+    props: [...SEAT, { k: 'db', at: 'ha' }],
+    k: [{ hip: [0, 50], t: 95, an: [40, 4], hr: [13, 12] }, { hip: [0, 50], t: 95, an: [40, 4], hr: [0, 51] }],
+  },
+  'elevaciones-laterales': {
+    v: 'front',
+    props: [{ k: 'db', at: 'ha' }, { k: 'db', at: 'ha2' }],
+    k: [{ hip: [0, 86], ha: [22, 88] }, { hip: [0, 86], ha: [64, 130] }],
+  },
+  'elevaciones-frontales': {
+    props: [{ k: 'db', at: 'ha' }],
+    k: [stand({ hr: [3, -50] }), stand({ hr: [36, -36] }), stand({ hr: [50, 6] })],
+  },
+  'pajaros': {
+    v: 'front',
+    props: [{ k: 'db', at: 'ha' }, { k: 'db', at: 'ha2' }],
+    k: [{ hip: [0, 80], tl: 0.45, an: [14, 4], ha: [12, 52] }, { hip: [0, 80], tl: 0.45, an: [14, 4], ha: [62, 96] }],
+  },
+  'face-pull': {
+    props: [{ k: 'seg', p: [100, 0, 100, 190] }, { k: 'cable', from: [96, 150], at: 'ha' }, { k: 'handle', at: 'ha' }],
+    k: [stand({ hr: [48, 10] }), stand({ hr: [-2, 18], eb: 1 })],
+  },
+  'remo-menton': {
+    props: [{ k: 'bar', at: 'ha' }],
+    k: [stand({ hr: [4, -50], eb: 1 }), stand({ hr: [8, -5], eb: 1 })],
+  },
+
+  // ---------- Bíceps y antebrazo ----------
+  'curl-barra': curl('bar'),
+  'curl-martillo': curl('db'),
+  'curl-polea': curl('handle', [{ k: 'cable', from: [34, 10], at: 'ha' }]),
+  'curl-mancuernas': {
+    props: [{ k: 'db', at: 'ha' }, { k: 'db', at: 'ha2' }],
+    k: [
+      stand({ hr: [3, -50], hr2: [12, -6] }),
+      stand({ hr: [26, -26], hr2: [26, -26] }),
+      stand({ hr: [12, -6], hr2: [3, -50] }),
+    ],
+  },
+  'curl-predicador': {
+    props: [{ k: 'bench', p: [-36, 43, 6, 43] }, { k: 'seg', p: [-2, 90, 26, 62], w: 9 }, { k: 'seg', p: [22, 64, 22, 0], w: 3 }, { k: 'bar', at: 'ha' }],
+    k: [
+      { hip: [-15, 49], t: 80, an: [22, 4], ha: [32, 64] },
+      { hip: [-15, 49], t: 80, an: [22, 4], ha: [39, 86] },
+      { hip: [-15, 49], t: 80, an: [22, 4], ha: [23, 105] },
+    ],
+  },
+  'curl-concentrado': {
+    props: [{ k: 'bench', p: [-40, 43, 10, 43] }, { k: 'db', at: 'ha' }],
+    k: [
+      { hip: [-10, 49], t: 55, an: [40, 4], ha: [26, 41] },
+      { hip: [-10, 49], t: 55, an: [40, 4], ha: [49, 68] },
+      { hip: [-10, 49], t: 55, an: [40, 4], ha: [24, 88] },
+    ],
+  },
+  'curl-muneca': {
+    props: [{ k: 'bench', p: [-40, 43, 50, 43] }, { k: 'db', at: 'hn' }],
+    k: [
+      { hip: [-30, 49], t: 50, an: [10, 4], ha: [28, 49], hn: -55 },
+      { hip: [-30, 49], t: 50, an: [10, 4], ha: [28, 49], hn: 45 },
+    ],
+  },
+
+  // ---------- Tríceps ----------
+  'press-frances': {
+    props: [FLAT, { k: 'bar', at: 'ha' }],
+    k: [
+      { hip: [22, 49], t: 180, an: [60, 4], ha: [-35, 101] },
+      { hip: [22, 49], t: 180, an: [60, 4], ha: [-54, 89] },
+      { hip: [22, 49], t: 180, an: [60, 4], ha: [-53, 63] },
+    ],
+  },
+  'extension-polea': {
+    props: [{ k: 'cable', from: [40, 196], at: 'ha' }, { k: 'handle', at: 'ha' }],
+    k: [
+      { hip: [0, 86], t: 85, an: [0, 4], ha: [24, 121] },
+      { hip: [0, 86], t: 85, an: [0, 4], ha: [25, 98] },
+      { hip: [0, 86], t: 85, an: [0, 4], ha: [4, 84] },
+    ],
+  },
+  'extension-overhead': {
+    props: [{ k: 'db', at: 'ha' }],
+    k: [stand({ hr: [-5, 51] }), stand({ hr: [-28, 35] }), stand({ hr: [-19, 6] })],
+  },
+  'fondos-banco': {
+    props: [{ k: 'bench', p: [-62, 43, -24, 43] }],
+    k: [
+      { sh0: [-25, 99], t: 92, ha: [-31, 47], an: [46, 4] },
+      { sh0: [-22, 76], t: 92, ha: [-31, 47], an: [46, 4] },
+    ],
+  },
+  'patada-triceps': {
+    props: [{ k: 'bench', p: [30, 43, 80, 43] }, { k: 'db', at: 'ha' }],
+    k: [
+      { hip: [-25, 74], t: 15, an: [-14, 4], hb: [46, 46], ha: [-3, 53] },
+      { hip: [-25, 74], t: 15, an: [-14, 4], hb: [46, 46], ha: [-22, 62] },
+      { hip: [-25, 74], t: 15, an: [-14, 4], hb: [46, 46], ha: [-27, 72] },
+    ],
+  },
+
+  // ---------- Abdomen ----------
+  'crunch': {
+    k: [{ hip: [0, 8], t: 180, an: [46, 6], arms: 'cross' }, { hip: [0, 8], t: 148, an: [46, 6], arms: 'cross' }],
+  },
+  'plancha': {
+    hold: 1400, dur: 1400,
+    k: [
+      { sh0: [-40, 31], t: 167.3, ha: [-65, 4], an: [88, 3], ft: -70, eb: 1 },
+      { sh0: [-40, 32], t: 167.8, ha: [-65, 4], an: [88, 3], ft: -70, eb: 1 },
+    ],
+  },
+  'elevacion-piernas': {
+    props: [{ k: 'seg', p: [-40, 188, 40, 188], w: 3 }],
+    k: [
+      { sh0: [0, 134], t: 90, ha: [0, 187], an: [2, 4] },
+      { sh0: [0, 134], t: 92, ha: [0, 187], an: [56, 28] },
+      { sh0: [0, 134], t: 95, ha: [0, 187], an: [80, 86] },
+    ],
+  },
+  'rueda-abdominal': {
+    props: [{ k: 'wheel', at: 'ha' }],
+    k: [
+      { hip: [-80, 44], t: 25, an: [-108, 5], ft: 180, ha: [-24, 9] },
+      { hip: [-40, 17], t: 8, an: [-108, 5], ft: 180, ha: [60, 9] },
+    ],
+  },
+  'giros-rusos': {
+    v: 'front',
+    props: [{ k: 'plate', at: 'mid' }],
+    k: [
+      { hip: [0, 22], t: 84, tl: 0.85, an: [20, 6], tll: 0.5, ha: [36, 50], hb: [26, 46], al: 0.8, eb: -1, ebB: -1 },
+      { hip: [0, 22], t: 96, tl: 0.85, an: [20, 6], tll: 0.5, ha: [-26, 46], hb: [-36, 50], al: 0.8, eb: 1, ebB: 1 },
+    ],
+  },
+  'plancha-lateral': {
+    k: [
+      { sh0: [-55, 31], t: 157, ha: [-62, 4], an: [86, 3], hr2: [40, -10], fal: 0.3, eb: 1 },
+      { sh0: [-55, 31], t: 168.7, ha: [-62, 4], an: [86, 3], hr2: [44, -6], fal: 0.3, eb: 1 },
+    ],
+  },
+  'lenador-polea': {
+    v: 'front',
+    props: [{ k: 'seg', p: [-88, 0, -88, 192] }, { k: 'cable', from: [-82, 186], at: 'mid' }, { k: 'handle', at: 'mid' }],
+    k: [
+      { hip: [0, 86], t: 96, ha: [-26, 172], hb: [-40, 168] },
+      { hip: [0, 86], t: 84, ha: [44, 84], hb: [32, 80] },
+    ],
+  },
+
+  // ---------- Piernas ----------
+  'sentadilla': {
+    props: [{ k: 'bar', at: 'back' }],
+    k: [stand({ arms: 'back' }), { hip: [-26, 44], t: 52, an: [0, 4], arms: 'back' }],
+  },
+  'sentadilla-frontal': {
+    props: [{ k: 'bar', at: 'front' }],
+    k: [stand({ arms: 'rack' }), { hip: [-20, 40], t: 70, an: [0, 4], arms: 'rack' }],
+  },
+  'sentadilla-goblet': {
+    props: [{ k: 'kb', at: 'ha' }],
+    k: [stand({ arms: 'goblet' }), { hip: [-18, 36], t: 72, an: [0, 4], arms: 'goblet' }],
+  },
+  'prensa': {
+    props: [{ k: 'seg', p: [6, 18, 100, 96], w: 4 }, { k: 'bench', p: [-6, 30, -48, 80], w: 9, legs: false }, { k: 'box', p: [-20, 0, 40, 26] }, { k: 'sled', at: 'an', a: 40 }],
+    k: [
+      { hip: [0, 37], t: 130, an: [58, 86], ft: 130, ha: [8, 34] },
+      { hip: [0, 37], t: 130, an: [36, 66], ft: 130, ha: [8, 34] },
+    ],
+  },
+  'zancadas': {
+    props: [{ k: 'db', at: 'ha' }],
+    k: [
+      { hip: [-3, 80], t: 90, an: [25, 4], an2: [-32, 6], ft2: -40, hr: [2, -50] },
+      { hip: [-6, 44], t: 90, an: [25, 4], an2: [-32, 6], ft2: -40, hr: [2, -50] },
+    ],
+  },
+  'bulgara': {
+    props: [{ k: 'bench', p: [-80, 36, -38, 36] }, { k: 'db', at: 'ha' }],
+    k: [
+      { hip: [-8, 78], t: 90, an: [22, 4], an2: [-52, 41], ft2: 190, hr: [2, -50] },
+      { hip: [-14, 42], t: 88, an: [22, 4], an2: [-52, 41], ft2: 190, hr: [2, -50] },
+    ],
+  },
+  'extension-cuadriceps': {
+    props: [...SEAT, { k: 'pad', at: 'an', r: 6 }],
+    k: [
+      { hip: [0, 50], t: 100, an: [40, 10], ha: [10, 48] },
+      { hip: [0, 50], t: 100, an: [80, 52], ha: [10, 48] },
+    ],
+  },
+  'peso-muerto-rumano': {
+    props: [{ k: 'bar', at: 'ha' }],
+    k: [stand({ hr: [3, -50] }), { hip: [-26, 80], t: 22, an: [0, 4], hr: [0, -51] }],
+  },
+  'curl-femoral': {
+    props: [{ k: 'bench', p: [-60, 40, 60, 40] }, { k: 'pad', at: 'an', r: 6 }],
+    k: [
+      { hip: [10, 46], t: 180, an: [90, 48], ha: [-64, 44], ft: 0, kb: -1 },
+      { hip: [10, 46], t: 180, an: [38, 84], ha: [-64, 44], ft: 0, kb: -1 },
+    ],
+  },
+  'aductores-maquina': {
+    v: 'front',
+    props: [{ k: 'bench', p: [-26, 46, 26, 46] }, { k: 'pad', at: 'knA', r: 6 }, { k: 'pad', at: 'knB', r: 6 }],
+    k: [{ hip: [0, 52], tll: 0.5, an: [44, 6], ha: [24, 50] }, { hip: [0, 52], tll: 0.5, an: [14, 6], ha: [24, 50] }],
+  },
+  'abduccion': {
+    v: 'front',
+    props: [{ k: 'bench', p: [-26, 46, 26, 46] }, { k: 'pad', at: 'knA', r: 6 }, { k: 'pad', at: 'knB', r: 6 }],
+    k: [{ hip: [0, 52], tll: 0.5, an: [14, 6], ha: [24, 50] }, { hip: [0, 52], tll: 0.5, an: [44, 6], ha: [24, 50] }],
+  },
+  'gemelos-pie': {
+    props: [{ k: 'box', p: [-14, 0, 30, 14] }, { k: 'pad', at: 'sh', r: 7 }],
+    k: [
+      { hip: [-2, 96], t: 90, an: [-2, 14], ft: 20, hr: [14, -8] },
+      { hip: [-2, 108], t: 90, an: [-2, 26], ft: -50, hr: [14, -8] },
+    ],
+  },
+  'gemelos-sentado': {
+    props: [{ k: 'bench', p: [-30, 43, 10, 43] }, { k: 'box', p: [30, 0, 22, 8] }, { k: 'pad', at: 'kn', r: 7 }],
+    k: [
+      { hip: [-10, 49], t: 90, an: [32, 10], ft: 15, ha: [24, 56] },
+      { hip: [-10, 49], t: 90, an: [32, 18], ft: -40, ha: [24, 56] },
+    ],
+  },
+
+  // ---------- Glúteos ----------
+  'hip-thrust': {
+    props: [{ k: 'bench', p: [-66, 40, -24, 40] }, { k: 'bar', at: 'hipbar' }],
+    k: [
+      { sh0: [-30, 46], t: 145.6, an: [45, 4], arms: null, ha: [6, 30] },
+      { sh0: [-30, 46], t: 180, an: [45, 4], ha: [18, 54] },
+    ],
+  },
+  'puente-gluteo': {
+    k: [
+      { sh0: [-40, 8], t: 180, an: [42, 4], ha: [2, 4] },
+      { sh0: [-40, 8], t: 205, an: [42, 4], ha: [2, 4] },
+    ],
+  },
+  'patada-gluteo': {
+    props: [{ k: 'seg', p: [40, 0, 40, 150], w: 6 }, { k: 'cable', from: [36, 10], at: 'an2' }],
+    k: [
+      { hip: [-2, 84], t: 76, an: [0, 4], an2: [4, 10], ha: [36, 110] },
+      { hip: [-2, 84], t: 70, an: [0, 4], an2: [-64, 44], ha: [36, 110] },
+    ],
+  },
+};
