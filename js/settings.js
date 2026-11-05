@@ -118,9 +118,12 @@ export function renderSettings() {
           </button>
         </div>
       </label>
-      <label class="field"><span>Modelo</span>
+      <label class="field"><span>${isGemini ? 'Modelo para fotos' : 'Modelo'}</span>
         <input data-k="${isGemini ? 'geminiModel' : 'model'}" autocapitalize="off" spellcheck="false" value="${esc(isGemini ? S.geminiModel : S.model)}">
       </label>
+      ${isGemini ? `<label class="field"><span>Modelo para texto y recetas</span>
+        <input data-k="geminiTextModel" autocapitalize="off" spellcheck="false" value="${esc(S.geminiTextModel)}">
+      </label>` : ''}
       <button class="btn secondary" id="test" style="margin-top:14px">Probar conexión</button>
       <div class="muted small" style="margin-top:12px;line-height:1.45">
         ${isGemini

@@ -56,7 +56,8 @@ const DEFAULTS = {
   height: 0,                       // cm, para calcular el IMC
   provider: 'gemini',              // 'gemini' (gratis) o 'claude' (de pago)
   geminiKey: '',
-  geminiModel: 'gemini-flash-latest',
+  geminiModel: 'gemini-flash-latest',          // fotos (comida, Zepp Life)
+  geminiTextModel: 'gemini-flash-lite-latest',  // texto y recetas: más rápido y con más límite diario
   apiKey: '',                      // clave de Claude
   model: 'claude-sonnet-5-5',
 };

@@ -168,14 +168,17 @@ export function mountLibrary(el, f, onPick, pick = false) {
     if (f.muscle || f.q.trim()) {
       html = list.map(e => exRow(e, f, pick)).join('');
     } else {
-      // Sin músculo elegido: un botón por grupo muscular que despliega sus ejercicios
+      // Sin músculo elegido: por grupos. Con un material elegido, todos a la vista;
+      // con «Todo», un desplegable por grupo (se pueden abrir varios a la vez)
+      const open = f.open ||= new Set();
       html = MUSCLES.map(g => {
         const items = list.filter(e => (e.cardio ? 'cardio' : PARTS[e.p[0]].group) === g.id);
         if (!items.length) return '';
-        const open = f.grp === g.id;
-        return `<button class="ex-grp ${open ? 'open' : ''}" data-grp="${g.id}" style="--c:${g.color}">
-            <i></i><b>${g.name}</b><span>${items.length}</span>${chev('r')}
-          </button>${open ? `<div class="ex-grp-list">${items.map(e => exRow(e, f, pick)).join('')}</div>` : ''}`;
+        if (f.eq) return `<div class="ex-group-head" style="--c:${g.color}"><i></i>${g.name}</div>${items.map(e => exRow(e, f, pick)).join('')}`;
+        const isOpen = open.has(g.id);
+        return `<button class="ex-grp ${isOpen ? 'open' : ''}" data-grp="${g.id}" style="--c:${g.color}">
+            <i></i><b>${g.name}</b>${chev('r')}
+          </button>${isOpen ? `<div class="ex-grp-list">${items.map(e => exRow(e, f, pick)).join('')}</div>` : ''}`;
       }).join('');
     }
     el.querySelector('#ex-list').innerHTML = html || '<div class="card empty"><span class="e">🔍</span><b>Sin resultados</b>Prueba con otro músculo o material.</div>';
@@ -191,7 +194,12 @@ export function mountLibrary(el, f, onPick, pick = false) {
     }
     if (e.target.closest('[data-clear]')) { f.muscle = null; setMapSelection(el, null); return draw(); }
     const grp = e.target.closest('[data-grp]');
-    if (grp) { f.grp = f.grp === grp.dataset.grp ? null : grp.dataset.grp; haptic(); return draw(); }
+    if (grp) {
+      const open = f.open ||= new Set(), id = grp.dataset.grp;
+      open.has(id) ? open.delete(id) : open.add(id);
+      haptic();
+      return draw();
+    }
     const eq = e.target.closest('[data-eq]');
     if (eq) {
       f.eq = eq.dataset.eq || null;

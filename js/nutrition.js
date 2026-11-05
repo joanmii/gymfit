@@ -4,7 +4,7 @@
 import { db } from './db.js';
 import { analyzeFood, analyzeText, createRecipe } from './api.js';
 import { openScanner, searchProducts } from './barcode.js';
-import { FOOD_CATS, searchFoods, foodsByCat, norm } from './foods.js';
+import { FOOD_CATS, FOODS, searchFoods, foodsByCat, norm } from './foods.js';
 import { searchRecipes } from './recipes.js';
 import { COOKBOOK } from './cookbook.js';
 import { renderWeight, openWeighIn } from './weight.js';
@@ -1071,7 +1071,7 @@ async function toggleFoodFav(food) {
   const old = findFoodFav(food.name);
   if (old) await db.deleteFoodFav(old.id);
   else await db.putFoodFav({
-    name: food.name.trim(), emoji: food.emoji || '⭐', image: food.image || null,
+    name: food.name.trim(), emoji: food.emoji || knownFood(food.name)?.emoji || '🍽️', image: food.image || knownFood(food.name)?.image || null,
     per100: food.per100,
     portions: food.portions.filter(([l]) => l !== '100 g'),
     createdAt: Date.now(),
@@ -1856,8 +1856,14 @@ async function runRecipeAI(req) {
 
 // ---------- Emoji de los alimentos (se puede cambiar tocándolo en su ficha) ----------
 const FOOD_EMOJIS = ['🥚', '🍳', '🥛', '🧀', '🧈', '🥩', '🍗', '🍖', '🥓', '🌭', '🍔', '🍟', '🍕', '🥪', '🌮', '🌯', '🥙', '🥗', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🍤', '🍙', '🍚', '🥘', '🥫', '🍞', '🥐', '🥖', '🥨', '🥯', '🧇', '🥞', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🫘', '🥜', '🌰', '🐟', '🦐', '🦑', '🥣', '🥤', '🧃', '☕', '🍵', '🍫', '🍪', '🍩', '🍰', '🧁', '🍦', '🍯', '🫒', '🍺', '🍷', '💪'];
-const foodEmoji = f => state.settings.foodEmoji?.[f.name] || f.emoji || '🍽️';
+// Alimento de tu lista o de la base con ese nombre (para recuperar su emoji o su foto)
+const knownFood = name => { const k = favKey(name); return myFoodsCache.find(f => favKey(f.name) === k) || FOODS.find(f => favKey(f.name) === k); };
+// El favorito conserva el emoji del alimento (los antiguos se guardaban con ⭐)
+const foodEmoji = f => state.settings.foodEmoji?.[f.name] || (f.emoji && f.emoji !== '⭐' ? f.emoji : knownFood(f.name)?.emoji) || '🍽️';
 // Miniatura: el emoji elegido manda sobre la foto del producto
-const foodThumb = f => (f.image && !state.settings.foodEmoji?.[f.name]
-  ? `<img src="${esc(f.image)}" alt="" loading="lazy">`
-  : `<span class="e">${foodEmoji(f)}</span>`);
+function foodThumb(f) {
+  const img = f.image || knownFood(f.name)?.image;   // foto del envase escaneado, aunque sea un favorito
+  return img && !state.settings.foodEmoji?.[f.name]
+    ? `<img src="${esc(img)}" alt="" loading="lazy">`
+    : `<span class="e">${foodEmoji(f)}</span>`;
+}

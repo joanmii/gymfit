@@ -92,10 +92,12 @@ const THINK = [{ thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }, { thinkin
 const THINK_KEY = 'gymfit-gemini-think';
 const thinkMap = () => { try { return JSON.parse(localStorage.getItem(THINK_KEY) || '{}'); } catch { return {}; } };
 
-async function gemini(parts, { json = true, maxTokens = 8192, system = SYSTEM_PROMPT, temperature = 0.2 } = {}) {
+async function gemini(parts, { json = true, maxTokens = 8192, system = SYSTEM_PROMPT, temperature = 0.2, text = false } = {}) {
   const S = state.settings;
   const key = requireKey(S.geminiKey);
-  const model = (S.geminiModel || 'gemini-flash-latest').trim();
+  // Fotos con el modelo principal; texto y recetas con el ligero (gasta menos y tiene más límite)
+  const model = (text ? S.geminiTextModel || 'gemini-flash-lite-latest' : S.geminiModel || 'gemini-flash-latest').trim();
+  const backup = model === GEMINI_FALLBACK ? (S.geminiModel || 'gemini-flash-latest').trim() : GEMINI_FALLBACK;
   const request = (m, think) => post(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
     { 'x-goog-api-key': key },
@@ -126,8 +128,8 @@ async function gemini(parts, { json = true, maxTokens = 8192, system = SYSTEM_PR
     data = await withRetry(() => call(model));
   } catch (e) {
     // Si el modelo elegido sigue saturado, prueba con el modelo ligero (suele tener menos demanda)
-    if (!e.busy || model === GEMINI_FALLBACK) throw e;
-    data = await withRetry(() => call(GEMINI_FALLBACK), [2000]);
+    if (!e.busy || backup === model) throw e;
+    data = await withRetry(() => call(backup), [2000]);
   }
   const cand = data.candidates?.[0];
   if (!cand) throw new Error(data.promptFeedback?.blockReason ? 'La foto fue bloqueada por el filtro de seguridad.' : 'Respuesta vacía de la IA.');
@@ -174,7 +176,7 @@ export async function analyzeText(description) {
   const prompt = `El usuario ha comido esto: ${description}`;
   const text = state.settings.provider === 'claude'
     ? await claude([{ type: 'text', text: prompt }])
-    : await gemini([{ text: prompt }]);
+    : await gemini([{ text: prompt }], { text: true });
   return parseResult(text);
 }
 
@@ -228,7 +230,7 @@ export async function createRecipe(req) {
   ].filter(Boolean).join('\n');
   const text = state.settings.provider === 'claude'
     ? await claude([{ type: 'text', text: prompt }], { system: RECIPE_PROMPT, maxTokens: 1500, temperature: 0.8 })
-    : await gemini([{ text: prompt }], { system: RECIPE_PROMPT, temperature: 0.8 });
+    : await gemini([{ text: prompt }], { system: RECIPE_PROMPT, temperature: 0.8, text: true });
   const match = (text || '').match(/\{[\s\S]*\}/);
   if (!match) throw new Error('No he podido leer la receta. Inténtalo otra vez.');
   const j = JSON.parse(match[0]);
