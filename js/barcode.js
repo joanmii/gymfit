@@ -175,11 +175,13 @@ function parseProduct(p, code = p.code) {
 
   const name = (p.product_name_es || p.product_name || p.generic_name_es || 'Producto').trim();
   const brand = (p.brands || '').split(',')[0].trim();
+  const store = (p.stores || '').split(',').map(x => x.trim()).filter(Boolean)[0] || '';
   const serving = parseFloat(p.serving_quantity);
   return {
     code,
     name: brand && !name.toLowerCase().includes(brand.toLowerCase()) ? `${name} (${brand})` : name,
     image: p.image_front_small_url || null,
+    brand, store,
     per100: {
       kcal: +kcal || 0,
       protein: +n.proteins_100g || 0,
@@ -193,9 +195,21 @@ function parseProduct(p, code = p.code) {
 
 // Busca productos por nombre en Open Food Facts (prioriza los vendidos en España).
 // Su buscador va a ratos saturado: prueba el servidor español y, si falla, el mundial.
-export async function searchProducts(query) {
-  const fields = 'code,product_name,product_name_es,generic_name_es,brands,nutriments,serving_quantity,serving_size,image_front_small_url';
-  const qs = `search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=25&fields=${fields}`;
+// Supermercados españoles para filtrar la búsqueda (etiqueta «stores» de Open Food Facts)
+export const STORES = [['mercadona', 'Mercadona'], ['consum', 'Consum'], ['carrefour', 'Carrefour'], ['lidl', 'Lidl'], ['dia', 'Dia'], ['alcampo', 'Alcampo'], ['eroski', 'Eroski'], ['aldi', 'Aldi']];
+
+// Busca productos: primero los que se venden en España (y en la tienda elegida); si no hay, en todo el mundo
+export async function searchProducts(query, store = null) {
+  let res = [];
+  try { res = await offSearch(query, store, true); } catch (e) { if (store) throw e; }
+  return res.length || store ? res : offSearch(query, null, false);
+}
+
+async function offSearch(query, store, spain) {
+  const fields = 'code,product_name,product_name_es,generic_name_es,brands,stores,nutriments,serving_quantity,serving_size,image_front_small_url';
+  const tags = [spain && ['countries', 'spain'], store && ['stores', store]].filter(Boolean)
+    .map(([type, val], i) => `&tagtype_${i}=${type}&tag_contains_${i}=contains&tag_${i}=${encodeURIComponent(val)}`).join('');
+  const qs = `search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=30${tags}&fields=${fields}`;
   let lastErr = new Error('Open Food Facts no responde ahora mismo. Prueba en un rato.');
   for (const host of ['es', 'world']) {
     const ctrl = new AbortController();

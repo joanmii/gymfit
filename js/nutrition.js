@@ -3,7 +3,7 @@
 // =========================================================
 import { db } from './db.js';
 import { analyzeFood, analyzeText, createRecipe } from './api.js';
-import { openScanner, searchProducts } from './barcode.js';
+import { openScanner, searchProducts, STORES } from './barcode.js';
 import { FOOD_CATS, FOODS, searchFoods, foodsByCat, norm } from './foods.js';
 import { searchRecipes } from './recipes.js';
 import { COOKBOOK } from './cookbook.js';
@@ -1118,14 +1118,21 @@ const starSpan = f => {
 const foodRow = (f, attr, browse = false) => `
   <button class="food-row" ${attr}>
     ${foodThumb(f)}
-    <span class="n">${esc(f.name)}</span>
+    <span class="n">${esc(f.name)}${f.store ? `<small>${esc(f.store)}</small>` : ''}</span>
     ${starSpan(f)}
     ${browse ? '' : '<span class="plus">+</span>'}
   </button>`;
 
+// Supermercado elegido para buscar en internet (se recuerda mientras usas la app)
+let onlineStore = null;
+const storeChips = () => `<div class="label">🌐 Buscar en internet · España</div><div class="chips scroll">
+  <button class="chip ${!onlineStore ? 'on' : ''}" data-store="" style="--c:var(--accent)">Todos</button>
+  ${STORES.map(([id, name]) => `<button class="chip ${onlineStore === id ? 'on' : ''}" data-store="${id}" style="--c:var(--accent)">${name}</button>`).join('')}
+</div>`;
+
 // Producto de Open Food Facts → mismo formato que la base local
 const productToFood = p => ({
-  name: p.name, emoji: '🏷️', image: p.image, per100: p.per100,
+  name: p.name, emoji: '🏷️', image: p.image, per100: p.per100, store: p.store, brand: p.brand,
   portions: p.servingGrams ? [['ración del envase', p.servingGrams]] : [],
 });
 
@@ -1165,12 +1172,13 @@ function mountFoodPicker(el, ctx) {
   const paintOnline = (state, msg = '') => {
     const query = st.q.trim();
     if (query.length < 2) { onl.innerHTML = ''; return; }
-    if (state === 'idle') onl.innerHTML = `<button class="btn secondary" data-pk="web" style="margin-top:10px">🌐 Buscar «${esc(query)}» en internet</button>`;
-    if (state === 'loading') onl.innerHTML = '<div class="online-load"><div class="spinner"></div>Buscando en Open Food Facts…</div>';
-    if (state === 'error') onl.innerHTML = `<div class="notice err">${esc(msg)}</div>`;
-    if (state === 'done') onl.innerHTML = online.length
-      ? `<div class="label">🌐 Productos de Open Food Facts</div><div class="food-list">${online.map((f, i) => row(f, `data-on="${i}"`)).join('')}</div>`
-      : `<div class="muted small" style="text-align:center;margin:12px 0">No hay productos en internet para «${esc(query)}».</div>`;
+    const chips = storeChips();
+    if (state === 'idle') onl.innerHTML = `${chips}<button class="btn secondary" data-pk="web" style="margin-top:10px">🌐 Buscar «${esc(query)}» en internet</button>`;
+    if (state === 'loading') onl.innerHTML = `${chips}<div class="online-load"><div class="spinner"></div>Buscando en Open Food Facts…</div>`;
+    if (state === 'error') onl.innerHTML = `${chips}<div class="notice err">${esc(msg)}</div>`;
+    if (state === 'done') onl.innerHTML = chips + (online.length
+      ? `<div class="food-list" style="margin-top:8px">${online.map((f, i) => row(f, `data-on="${i}"`)).join('')}</div>`
+      : `<div class="muted small" style="text-align:center;margin:12px 0">No hay productos para «${esc(query)}»${onlineStore ? ' en esa tienda' : ''}.</div>`);
   };
 
   // Tras marcar/desmarcar: repinta las estrellas sin perder la búsqueda en internet
@@ -1225,11 +1233,13 @@ function mountFoodPicker(el, ctx) {
     if (fi) return mountPortion(el, shown[Number(fi.dataset.fi)], ctx);
     const on = e.target.closest('[data-on]');
     if (on) return mountPortion(el, online[Number(on.dataset.on)], ctx);
-    if (act === 'web') {
+    const so = e.target.closest('[data-store]');
+    if (so) { onlineStore = so.dataset.store || null; haptic(); }
+    if (act === 'web' || so) {
       const query = st.q.trim();
       paintOnline('loading');
       try {
-        online = (await searchProducts(query)).map(productToFood);
+        online = (await searchProducts(query, onlineStore)).map(productToFood);
         if (st.q.trim() === query && onl.isConnected) paintOnline('done');
       } catch (err) {
         if (onl.isConnected) paintOnline('error', err.message);
@@ -1282,7 +1292,7 @@ function openFoodBrowser(tab) {
         ${query ? '' : `<div class="chips scroll">${catChips(st.cat)}</div>`}
         <div class="food-list">${foods.map((f, i) => infoRow(f, `data-fi="${i}"`, '')).join('')
           || (!query && st.cat === 'fav' ? FAV_EMPTY : '<div class="muted small" style="text-align:center;margin:12px 0">No está en la lista.</div>')}</div>
-        ${query.length >= 2 ? `<div data-web><button class="btn secondary" data-websearch style="margin-top:10px">🌐 Buscar «${esc(query)}» en internet</button></div>` : ''}`;
+        ${query.length >= 2 ? `<div data-web>${storeChips()}<button class="btn secondary" data-websearch style="margin-top:10px">🌐 Buscar «${esc(query)}» en internet</button></div>` : ''}`;
     };
     const paintDishes = () => {
       const query = st.q.trim();
@@ -1318,18 +1328,20 @@ function openFoodBrowser(tab) {
         const dish = pick('data-md', mine) || pick('data-rd', dishes);
         if (dish) return openDishDetail(dish);
       }
-      if (e.target.closest('[data-websearch]')) {
+      const so = e.target.closest('[data-store]');
+      if (so) { onlineStore = so.dataset.store || null; haptic(); }
+      if (e.target.closest('[data-websearch]') || so) {
         const web = body.querySelector('[data-web]');
         const query = st.q.trim();
-        web.innerHTML = '<div class="online-load"><div class="spinner"></div>Buscando en Open Food Facts…</div>';
+        web.innerHTML = `${storeChips()}<div class="online-load"><div class="spinner"></div>Buscando en Open Food Facts…</div>`;
         try {
-          online = (await searchProducts(query)).map(productToFood);
+          online = (await searchProducts(query, onlineStore)).map(productToFood);
           if (!web.isConnected) return;
-          web.innerHTML = online.length
-            ? `<div class="label">🌐 Productos de Open Food Facts</div><div class="food-list">${online.map((f, i) => infoRow(f, `data-on="${i}"`, '')).join('')}</div>`
-            : `<div class="muted small" style="text-align:center;margin:12px 0">No hay productos en internet para «${esc(query)}».</div>`;
+          web.innerHTML = storeChips() + (online.length
+            ? `<div class="food-list" style="margin-top:8px">${online.map((f, i) => infoRow(f, `data-on="${i}"`, f.store || '')).join('')}</div>`
+            : `<div class="muted small" style="text-align:center;margin:12px 0">No hay productos para «${esc(query)}»${onlineStore ? ' en esa tienda' : ''}.</div>`);
         } catch (err) {
-          if (web.isConnected) web.innerHTML = `<div class="notice err">${esc(err.message)}</div>`;
+          if (web.isConnected) web.innerHTML = `${storeChips()}<div class="notice err">${esc(err.message)}</div>`;
         }
       }
     });
