@@ -205,22 +205,33 @@ export async function searchProducts(query, store = null) {
   return res.length || store ? res : offSearch(query, null, false);
 }
 
+// Búsquedas ya hechas en esta sesión: repetirlas no vuelve a preguntar (y gasta menos del límite de Open Food Facts)
+const offCache = new Map();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 async function offSearch(query, store, spain) {
+  const key = `${query.trim().toLowerCase()}|${store || ''}|${spain ? 'es' : 'all'}`;
+  if (offCache.has(key)) return offCache.get(key);
   const fields = 'code,product_name,product_name_es,generic_name_es,brands,stores,nutriments,serving_quantity,serving_size,image_front_small_url';
   const tags = [spain && ['countries', 'spain'], store && ['stores', store]].filter(Boolean)
     .map(([type, val], i) => `&tagtype_${i}=${type}&tag_contains_${i}=contains&tag_${i}=${encodeURIComponent(val)}`).join('');
   const qs = `search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=30${tags}&fields=${fields}`;
   let lastErr = new Error('Open Food Facts no responde ahora mismo. Prueba en un rato.');
-  for (const host of ['es', 'world']) {
+  // Dos servidores; si los dos fallan, una pausa corta y otra vuelta
+  for (const [i, host] of ['es', 'world', 'es', 'world'].entries()) {
+    if (i === 2) await sleep(1500);
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 12000);
+    const timer = setTimeout(() => ctrl.abort(), 7000);
     try {
       const res = await fetch(`https://${host}.openfoodfacts.org/cgi/search.pl?${qs}`, { signal: ctrl.signal });
+      if (res.status === 429) { lastErr = new Error('Demasiadas búsquedas seguidas. Espera un minuto y vuelve a probar.'); await sleep(1500); continue; }
       if (!res.ok) continue;
       const data = await res.json();
-      return (data.products || []).map(p => parseProduct(p)).filter(p => p && p.name !== 'Producto');
+      const out = (data.products || []).map(p => parseProduct(p)).filter(p => p && p.name !== 'Producto');
+      offCache.set(key, out);
+      return out;
     } catch {
-      if (!navigator.onLine) lastErr = new Error('Sin conexión. Revisa tu internet e inténtalo de nuevo.');
+      if (!navigator.onLine) { lastErr = new Error('Sin conexión. Revisa tu internet e inténtalo de nuevo.'); break; }
     } finally {
       clearTimeout(timer);
     }
