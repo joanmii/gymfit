@@ -217,7 +217,7 @@ async function renderStepsCard(el, s, e) {
       <div><b>${kSteps(total)}</b><span>pasos en total</span></div>
     </div>
     ${bars(items, { height: 150, goal: chartGoal || null, showValues: period !== 'month' })}`
-    : `<div class="empty"><span class="e">👟</span><b>Sin pasos en este periodo</b>Apúntalos en Nutrición → Actividad.</div>`}`;
+    : `<div class="empty"><span class="e">👟</span><b>Sin pasos en este periodo</b></div>`}`;
 }
 
 // Evolución del peso en cada ejercicio (entrenos hechos en modo entrenar)
@@ -226,7 +226,7 @@ function progressCard() {
   const done = [...new Set(recent.flatMap(s => s.items.map(i => i.ex)))].filter(id => EX[id]);
   if (!done.length) {
     return `<div class="card"><div class="card-head"><h3>Progreso por ejercicio</h3></div>
-      <div class="empty"><span class="e">📈</span><b>Aún no hay entrenos registrados</b>Pulsa "Empezar entreno" en una rutina y aquí verás cómo suben tus pesos.</div></div>`;
+      <div class="empty"><span class="e">📈</span><b>Aún no hay entrenos registrados</b></div></div>`;
   }
   if (!done.includes(progEx)) progEx = done[0];
   const options = [...done].sort((a, b) => EX[a].name.localeCompare(EX[b].name, 'es'))

@@ -187,7 +187,6 @@ export async function renderNutrition() {
       <div class="card empty">
         <span class="e">📸</span>
         <b>${isToday ? 'Aún no has registrado comidas' : 'Sin comidas este día'}</b>
-        Pulsa <b style="display:inline;font-size:inherit">+</b> para añadir con foto, voz o código de barras.
       </div>`}
 
     <div class="card" style="margin-top:18px">
