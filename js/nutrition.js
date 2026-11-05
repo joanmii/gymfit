@@ -1145,7 +1145,7 @@ const storeChips = () => `<div class="label">🌐 Buscar en internet · España<
 
 // Producto de Open Food Facts → mismo formato que la base local
 const productToFood = p => ({
-  name: p.name, emoji: '🏷️', image: p.image, per100: p.per100, store: p.store, brand: p.brand,
+  name: p.name, emoji: '🏷️', image: p.image, per100: p.per100, store: p.store, brand: p.brand, code: p.code,
   portions: p.servingGrams ? [['ración del envase', p.servingGrams]] : [],
 });
 
@@ -1548,6 +1548,8 @@ function mountPortion(el, food, ctx) {
   let sel = 0, units = 1, grams = portions[0][1];
   const p = food.per100;
   const box = freshBox(el);
+  // Producto escaneado o de internet que aún no está en tu lista: se puede guardar con su categoría
+  const isProduct = !food.custom && !FOODS.some(f => f.name === food.name) && !myFoodsCache.some(f => favKey(f.name) === favKey(food.name));
 
   box.innerHTML = `
     <div class="sheet-title-row">
@@ -1570,7 +1572,11 @@ function mountPortion(el, food, ctx) {
       <label class="grams"><input data-grams type="number" inputmode="decimal" min="0" step="1"><span>g</span></label>
     </div>
     <div class="totals-row" data-pv style="margin-top:14px"></div>
-    <button class="btn primary" data-pk="add" style="margin-top:14px">Añadir</button>`;
+    <button class="btn primary" data-pk="add" style="margin-top:14px">Añadir</button>
+    ${isProduct ? `<div class="save-food" data-savebox>
+      <div class="label">Guardar en mis alimentos</div>
+      <div class="chips">${FOOD_CATS.map(c => `<button class="chip" data-pcat="${c.id}" style="--c:var(--accent)">${c.emoji} ${c.name}</button>`).join('')}</div>
+    </div>` : ''}`;
 
   const gIn = box.querySelector('[data-grams]');
   const star = box.querySelector('[data-pk="fav"]');
@@ -1605,6 +1611,20 @@ function mountPortion(el, food, ctx) {
       await toggleFoodFav({ ...food, portions: chosen[0] === '100 g' ? food.portions : [chosen, ...rest] });
       haptic();
       return paintStar();
+    }
+    const pc = e.target.closest('[data-pcat]');
+    if (pc) {
+      const cat = pc.dataset.pcat;
+      await db.putMyFood({
+        name: food.name, cat, custom: true, createdAt: Date.now(),
+        emoji: FOOD_CATS.find(x => x.id === cat)?.emoji || '🍽️',
+        ...(food.image ? { image: food.image } : {}), ...(food.code ? { code: food.code } : {}),
+        per100: food.per100, portions: food.portions.filter(([l]) => l !== '100 g'),
+      });
+      await loadMyFoods();
+      box.querySelector('[data-savebox]').innerHTML = `<div class="notice" style="margin-top:14px">✓ Guardado en ${esc(FOOD_CATS.find(x => x.id === cat)?.name || '')}. Edita su ración en 🍽️ Alimentos.</div>`;
+      haptic();
+      return toast('Guardado en mis alimentos 🍽️');
     }
     const pb = e.target.closest('[data-p]');
     if (pb) { sel = Number(pb.dataset.p); units = 1; grams = portions[sel][1]; haptic(); return paint(); }
