@@ -74,8 +74,6 @@ function routinesHtml() {
       <div class="routine-top"><b>${esc(r.name)}</b>${chev('r')}</div>
       <div class="muted small">${r.items.length} ${r.items.length === 1 ? 'ejercicio' : 'ejercicios'}${groups.length ? ` · ${groups.map(g => M[g].name).join(' · ')}` : ''}</div>
       <div class="today-dots">${groups.map(g => `<i style="--c:${M[g].color}"></i>`).join('')}</div>
-      ${r.items.length ? `<ol class="routine-ex">${r.items.slice(0, 4).map(i => `<li><span>${esc(EX[i.ex]?.name || i.ex)}</span><b>${esc(i.sets)} × ${esc(i.reps)}${i.kg ? ` · ${esc(i.kg)} kg` : ''}</b></li>`).join('')}
-        ${r.items.length > 4 ? `<li class="muted">y ${r.items.length - 4} más…</li>` : ''}</ol>` : ''}
       ${r.items.length ? `<button class="btn small primary start" data-start="${r.id}">▶ Empezar entreno</button>` : ''}
     </div>`;
   }).join('');
@@ -84,12 +82,12 @@ function routinesHtml() {
     ${cards || `<div class="card empty"><span class="e">📋</span><b>Aún no tienes rutinas</b>Crea una desde cero o empieza con una plantilla.</div>`}
     <button class="btn primary" id="gen-routine">✨ Crear rutina automática</button>
     <button class="btn primary" id="new-routine">+ Nueva rutina</button>
-    <button class="btn primary" id="free-workout">⚡ Entrenamiento libre</button>
+    <button class="btn tint" id="free-workout">⚡ Entrenamiento libre</button>
     <div class="section-label">Plantillas</div>
     <div class="action-list">
       ${TEMPLATES.map((t, i) => `<button class="action" data-template="${i}" style="--c:color-mix(in srgb,var(--accent) 22%,transparent)">
-        <span class="e">${['💪', '🧗', '🦵', '⚡'][i] || '📋'}</span>
-        <div>${esc(t.name)}<small>${t.items.map(([id]) => EX[id].name).join(', ')}</small></div>
+        <span class="e">${t.emoji || '📋'}</span>
+        <div>${esc(t.name)}<small>${t.items.length} ejercicios</small></div>
       </button>`).join('')}
     </div>`;
 }
@@ -174,10 +172,15 @@ function zoneList(ids) {
   return ids.map(id => `<span class="zone"><i style="--c:${partColor(id)}"></i>${PARTS[id].name}</span>`).join('');
 }
 
-function openExercise(id) {
+function openExercise(id) { showExercise(id); }
+
+// back: si se abre desde una rutina o un entreno, botón para volver a donde estabas
+export function showExercise(id, back = null) {
   const ex = EX[id];
+  if (!ex) return;
   const prog = progressBlock(id);
-  openSheet(`
+  (back ? setSheetContent : openSheet)(`
+    ${back ? `<button class="link back" id="ex-back">${chev('l')} Volver</button>` : ''}
     <h2 class="sheet-title">${esc(ex.name)}</h2>
     <div class="muted small">${EQ_EMOJI[ex.eq]} ${EQUIPMENT[ex.eq]}</div>
     <div class="card" style="margin-top:14px">
@@ -193,10 +196,11 @@ function openExercise(id) {
     ${ex.tips ? `<div class="notice">💡 ${esc(ex.tips)}</div>` : ''}
     ${hasAnim(id) ? '<div class="card ex-anim" id="ex-anim"></div>' : ''}
     <a class="link" href="${videoUrl(ex)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:12px">¿Más dudas? Ver vídeos en YouTube</a>
-    <button class="btn primary" id="add-to" style="margin-top:14px">Añadir a una rutina</button>`, body => {
+    ${back ? '' : '<button class="btn primary" id="add-to" style="margin-top:14px">Añadir a una rutina</button>'}`, body => {
     const anim = body.querySelector('#ex-anim');
     if (anim) mountAnim(anim, id);
-    body.querySelector('#add-to').addEventListener('click', () => chooseRoutine(id));
+    body.querySelector('#add-to')?.addEventListener('click', () => chooseRoutine(id));
+    body.querySelector('#ex-back')?.addEventListener('click', back);
   });
 }
 
@@ -239,7 +243,7 @@ function openEditor(existing) {
     return `<div class="card item rt-item">
       <div class="item-top">
         <span class="rt-num" style="--c:${partColor(ex?.p[0])}">${i + 1}</span>
-        <div class="rt-name"><b>${esc(ex?.name || it.ex)}</b><small>${ex ? ex.p.map(p => PARTS[p].name).join(', ') : ''}</small></div>
+        <div class="rt-name"><b class="ex-link" data-info="${it.ex}">${esc(ex?.name || it.ex)}</b><small>${ex ? ex.p.map(p => PARTS[p].name).join(', ') : ''}</small></div>
         <button class="icon-btn" data-mv="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">${arrow('M12 19V5M5 12l7-7 7 7')}</button>
         <button class="icon-btn" data-mv="${i}" data-d="1" ${i === draft.items.length - 1 ? 'disabled' : ''} aria-label="Bajar">${arrow('M12 5v14M5 12l7 7 7-7')}</button>
         <button class="icon-btn" data-rm="${i}" aria-label="Quitar">${arrow('M6 6l12 12M18 6L6 18')}</button>
@@ -273,6 +277,8 @@ function openEditor(existing) {
       if (i !== undefined) draft.items[i][e.target.dataset.f] = e.target.value.trim();
     });
     body.addEventListener('click', async e => {
+      const info = e.target.closest('[data-info]');
+      if (info) return showExercise(info.dataset.info, () => setSheetContent(editorHtml(), mountEditor));
       const mv = e.target.closest('[data-mv]');
       if (mv) {
         const i = Number(mv.dataset.mv), j = i + Number(mv.dataset.d);
@@ -403,7 +409,7 @@ function showGenerated(opts, formHtml, formMount) {
         return `<div class="card item rt-item">
           <div class="item-top">
             <span class="rt-num" style="--c:${partColor(ex.p[0])}">${i + 1}</span>
-            <div class="rt-name"><b>${esc(ex.name)}</b><small>${EQ_EMOJI[ex.eq]} ${EQUIPMENT[ex.eq]} · ${ex.p.map(p => PARTS[p].name).join(', ')}</small></div>
+            <div class="rt-name"><b class="ex-link" data-exname="${it.ex}">${esc(ex.name)}</b><small>${EQ_EMOJI[ex.eq]} ${EQUIPMENT[ex.eq]} · ${ex.p.map(p => PARTS[p].name).join(', ')}</small></div>
             <button class="icon-btn" data-swap="${i}" aria-label="Cambiar por otro ejercicio">🔀</button>
           </div>
           <div class="gen-plan"><b>${it.sets} × ${esc(it.reps)}</b><button class="link" data-info="${it.ex}">▶️ Ver técnica</button></div>
@@ -411,7 +417,7 @@ function showGenerated(opts, formHtml, formMount) {
         </div>`;
       }).join('')}</div>
       <button class="btn primary" id="gen-start">▶ Empezar entreno ahora</button>
-      <button class="btn secondary" id="gen-save">Guardar rutina (puedes editarla)</button>
+      <button class="btn secondary" id="gen-save">Guardar rutina</button>
       <button class="btn ghost" id="gen-again">🔀 Generar otra variante</button>` : `
       <div class="card empty"><span class="e">🤷</span><b>No hay ejercicios</b>Prueba con otro material o más grupos.</div>`}`;
   };
@@ -431,6 +437,8 @@ function showGenerated(opts, formHtml, formMount) {
         haptic();
         return setSheetContent(html(), mount);
       }
+      const exn = e.target.closest('[data-exname]');
+      if (exn) return showExercise(exn.dataset.exname, () => setSheetContent(html(), mount));
       const info = e.target.closest('[data-info]');
       if (info) {
         const box = info.closest('.rt-item').querySelector('[data-anim]');

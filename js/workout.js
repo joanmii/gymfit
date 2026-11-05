@@ -8,7 +8,7 @@ import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet, onSheetCleanup } from './sheet.js';
 import { EX } from './exercises.js';
 import { PARTS, partColor } from './bodymap.js';
-import { mountLibrary, renderRoutines } from './routines.js';
+import { mountLibrary, renderRoutines, showExercise } from './routines.js';
 import { refreshBodyWeight, workoutKcal } from './energy.js';
 import { state, MUSCLES, keyOf, today, fromKey, esc, toast, haptic } from './utils.js';
 
@@ -128,7 +128,7 @@ function itemHtml(it, x) {
   return `<div class="card wk-ex">
     <div class="item-top">
       <span class="rt-num" style="--c:${partColor(ex.p[0])}">${x + 1}</span>
-      <div class="rt-name"><b>${esc(ex.name)}</b><small>${esc(sub)}</small></div>
+      <div class="rt-name"><b class="ex-link" data-info="${it.ex}">${esc(ex.name)}</b><small>${esc(sub)}</small></div>
       <button class="icon-btn" data-rmex="${x}" aria-label="Quitar ejercicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="wk-row wk-hdr"><span>Serie</span><span>Kg</span><span>Reps${it.target ? ` · ${esc(it.target)}` : ''}</span><span></span></div>
@@ -199,6 +199,8 @@ function mountWorkout(body, s) {
   });
 
   body.addEventListener('click', async e => {
+    const info = e.target.closest('[data-info]');
+    if (info) return showExercise(info.dataset.info, () => setSheetContent(workoutHtml(s), b => mountWorkout(b, s)));
     const d = e.target.closest('[data-done]');
     if (d) {
       const [x, k] = d.dataset.done.split('-').map(Number);

@@ -168,8 +168,8 @@ function openDay(k) {
     }).join('')}
     <div class="label">¿Has ido al gimnasio?</div>
     <div class="yesno">
-      <button data-att="1" class="yes ${draft.attended === true ? 'on' : ''}"><span class="e">💪</span>Sí, fui</button>
-      <button data-att="0" class="no ${draft.attended === false ? 'on' : ''}"><span class="e">😴</span>No fui</button>
+      <button data-att="1" class="yes ${draft.attended === true ? 'on' : ''}"><span class="e">💪</span>Sí</button>
+      <button data-att="0" class="no ${draft.attended === false ? 'on' : ''}"><span class="e">😴</span>No</button>
     </div>
     <div id="trained-fields" class="${draft.attended ? '' : 'hidden'}">
       ${state.routines.length ? `

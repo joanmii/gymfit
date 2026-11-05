@@ -10,7 +10,7 @@ import { renderWeight, openWeighIn } from './weight.js';
 import { ring, bars } from './charts.js';
 import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet, onSheetCleanup } from './sheet.js';
-import { refreshBodyWeight, hasBodyWeight, bodyKg, stepsKcal, stepsKm, dayWorkout } from './energy.js';
+import { refreshBodyWeight, hasBodyWeight, bodyKg, stepsKcal, stepsKm, dayWorkout, basalKcal } from './energy.js';
 import { state, saveSettings, hasAiKey, keyOf, today, addDays, fmtLong, cap, esc, r0, r1, toast, haptic, WD_SHORT } from './utils.js';
 
 const MEAL_TYPES = [
@@ -173,6 +173,7 @@ export async function renderNutrition() {
         </div>
       </div>
       ${burned ? `<div class="act-note">Comido <b>${r0(tot.kcal)}</b> − actividad <b>${r0(burned)}</b> = <b>${r0(tot.kcal - burned)}</b> kcal netas</div>` : ''}
+      ${basalKcal() ? `<div class="act-note muted small">Gasto del día ≈ <b>${r0(basalKcal() + burned).toLocaleString('es-ES')}</b> kcal (basal ${r0(basalKcal()).toLocaleString('es-ES')} + actividad ${r0(burned)})</div>` : ''}
       ${hasBodyWeight() ? '' : `<div class="act-note muted">Calculado con ${bodyKg()} kg: apunta tu peso en ⚖️ Peso para afinar.</div>`}
     </div>
 
@@ -204,8 +205,7 @@ export async function renderNutrition() {
           <div><b class="p-c">${r0(avg.protein)}g</b><span>proteína</span></div>
           <div><b class="c-c">${r0(avg.carbs)}g</b><span>hidratos</span></div>
           <div><b class="f-c">${r0(avg.fat)}g</b><span>grasa</span></div>
-        </div>
-        <div class="muted small" style="text-align:center;margin-top:8px">${loggedDays === 1 ? 'Solo 1 día con registros' : `Media de los ${loggedDays} días con registros`}</div>` : ''}
+        </div>` : ''}
     </div>`;
 }
 
@@ -279,7 +279,7 @@ function scoreCard(s) {
   const pct = x => `${r0(x * 100)} %`;
   return `<div class="score-head">
       <span class="grade big" style="--c:${s.c}">${s.g}</span>
-      <div><b>${s.t} · ${r1(s.score).toLocaleString('es-ES')}/10</b><small>Según sus macros por gramo</small></div>
+      <div><b>${s.t} · ${r1(s.score).toLocaleString('es-ES')}/10</b></div>
     </div>
     ${s.per100 ? `<div class="per100"><span>Por 100 g</span>
       <b>${r0(s.per100.kcal)} kcal</b><b class="p-c">P ${r1(s.per100.protein)}</b><b class="c-c">H ${r1(s.per100.carbs)}</b><b class="f-c">G ${r1(s.per100.fat)}</b></div>` : ''}
@@ -365,7 +365,7 @@ function openAddMenu(inPlace = false) {
 
   (inPlace ? setSheetContent : openSheet)(`
     <h2 class="sheet-title">Añadir comida</h2>
-    <div class="muted small">${+day === +today() ? 'Se guardará en el día de hoy' : `Se guardará el ${esc(fmtLong(day))}`}</div>
+    ${+day === +today() ? '' : `<div class="muted small">Se guardará el ${esc(fmtLong(day))}</div>`}
     <div class="tiles">
       ${tile('cam', '📷', 'Foto', 'La IA lo calcula', 'var(--accent)')}
       ${tile('txt', '🎙️', 'Describir', 'Por texto o voz', 'var(--purple)')}

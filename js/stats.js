@@ -126,16 +126,16 @@ export function renderStats() {
       </div>
       <div>
         <div class="kpi-label">Días entrenados</div>
-        <div class="kpi-value" style="font-size:28px">${goal ? Math.min(100, Math.round(trained.length / goal * 100)) : 0}<small>% objetivo</small></div>
-        <div class="kpi-sub">${trained.length >= goal && goal ? '¡Objetivo cumplido! 🎉' : `Te faltan ${Math.max(0, goal - trained.length)} días`}</div>
+        <div class="kpi-value" style="font-size:44px">${goal ? Math.min(100, Math.round(trained.length / goal * 100)) : 0}%</div>
+        ${trained.length >= goal && goal ? '<div class="kpi-sub" style="font-size:20px">🎉</div>' : ''}
       </div>
     </div>
 
     <div class="kpis">
-      <div class="card"><div class="kpi-label">Asistencia</div><div class="kpi-value">${attendance}<small>%</small></div><div class="kpi-sub">de los días transcurridos</div></div>
+      <div class="card kpi-center"><div class="kpi-label">Asistencia</div><div class="kpi-value kpi-big">${attendance}%</div></div>
       <div class="card"><div class="kpi-label">Tiempo total</div><div class="kpi-value">${minutes >= 60 ? (minutes / 60).toFixed(1).replace('.', ',') : minutes}<small>${minutes >= 60 ? 'h' : 'min'}</small></div><div class="kpi-sub">${trained.length ? `${Math.round(minutes / trained.length) || 0} min de media` : 'sin datos'}</div></div>
       <div class="card"><div class="kpi-label">Racha actual</div><div class="kpi-value">${current}<small>sem</small></div><div class="kpi-sub">cumpliendo ${target} días/sem</div></div>
-      <div class="card"><div class="kpi-label">Mejor racha</div><div class="kpi-value">${best}<small>sem</small></div><div class="kpi-sub">tu récord 🏆</div></div>
+      <div class="card"><div class="kpi-label">Mejor racha</div><div class="kpi-value">${best}<small>sem 🏆</small></div></div>
     </div>
 
     <div class="card">
@@ -144,7 +144,7 @@ export function renderStats() {
     </div>
 
     <div class="card">
-      <div class="card-head"><h3>Grupos musculares</h3><span class="muted small">sesiones</span></div>
+      <div class="card-head"><h3>Grupos musculares</h3></div>
       ${groupRows.length ? hbars(groupRows) : `<div class="empty"><span class="e">📊</span><b>Sin datos todavía</b>Registra entrenos en el calendario.</div>`}
     </div>
 
@@ -184,7 +184,7 @@ async function renderStepsCard(el, s, e) {
   const t = today();
   const color = v => (!goal ? 'var(--orange)' : v >= goal ? 'var(--accent)' : 'var(--orange)');
 
-  let items, chartGoal = goal, unitNote = 'pasos al día';
+  let items, chartGoal = goal;
   if (period === 'week' || period === 'month') {
     items = [];
     let i = 0;
@@ -194,7 +194,6 @@ async function renderStepsCard(el, s, e) {
       items.push({ label, value: v, color: color(v), highlight: +d === +t, display: kSteps(v) });
     }
   } else {
-    unitNote = 'media diaria de cada mes';
     items = MONTHS_SHORT.map((mn, mi) => {
       const vals = [...byDay].filter(([k]) => fromKey(k).getMonth() === mi).map(([, v]) => v);
       const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
@@ -210,15 +209,14 @@ async function renderStepsCard(el, s, e) {
   const best = vals.length ? Math.max(...vals) : 0;
 
   el.innerHTML = `
-    <div class="card-head"><h3>👟 Pasos</h3><span class="muted small">${unitNote}</span></div>
+    <div class="card-head"><h3>👟 Pasos</h3></div>
     ${vals.length ? `
     <div class="steps-kpis">
       <div><b>${Math.round(avg).toLocaleString('es-ES')}</b><span>media diaria</span></div>
       <div><b>${goal ? `${hit}/${vals.length}` : kSteps(best)}</b><span>${goal ? 'días con objetivo' : 'mejor día'}</span></div>
       <div><b>${kSteps(total)}</b><span>pasos en total</span></div>
     </div>
-    ${bars(items, { height: 150, goal: chartGoal || null, showValues: period !== 'month' })}
-    ${goal ? `<div class="muted small" style="margin-top:6px">Verde: cumpliste tu objetivo de ${goal.toLocaleString('es-ES')} pasos.</div>` : ''}`
+    ${bars(items, { height: 150, goal: chartGoal || null, showValues: period !== 'month' })}`
     : `<div class="empty"><span class="e">👟</span><b>Sin pasos en este periodo</b>Apúntalos en Nutrición → Actividad.</div>`}`;
 }
 

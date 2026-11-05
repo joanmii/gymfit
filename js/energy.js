@@ -12,15 +12,16 @@ const GYM_MET = 5;                     // pesas a intensidad media (Compendio de
 const GYM_DEFAULT_MIN = 60;            // si marcaste el día sin duración
 
 // Último peso conocido (se refresca al abrir la app y la pestaña Nutrición)
-let lastKg = null;
+let lastKg = null, lastBmr = null;
 export async function refreshBodyWeight() {
   try {
-    const all = await db.allWeights();
-    const last = all.filter(w => w.weight > 0).sort((a, b) => a.date.localeCompare(b.date)).at(-1);
-    lastKg = last ? last.weight : null;
+    const all = (await db.allWeights()).sort((a, b) => a.date.localeCompare(b.date));
+    lastKg = all.filter(w => w.weight > 0).at(-1)?.weight ?? null;
+    lastBmr = all.filter(w => w.bmr > 0).at(-1)?.bmr ?? null;   // metabolismo basal de la última pesada que lo tenga
   } catch { /* nada */ }
   return lastKg;
 }
+export const basalKcal = () => lastBmr;
 export const bodyKg = () => lastKg || DEFAULT_KG;
 export const hasBodyWeight = () => !!lastKg;
 

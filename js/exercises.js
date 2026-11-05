@@ -314,8 +314,11 @@ export const videoUrl = ex => `https://www.youtube.com/results?search_query=${en
 
 // Plantillas para empezar rápido (sets × reps)
 export const TEMPLATES = [
-  { name: 'Empuje (pecho, hombro, tríceps)', items: [['press-banca', 4, '6-8'], ['press-inclinado-mancuernas', 3, '8-10'], ['press-hombro-mancuernas', 3, '8-10'], ['elevaciones-laterales', 3, '12-15'], ['extension-polea', 3, '10-12']] },
-  { name: 'Tirón (espalda, bíceps)', items: [['dominadas', 4, '6-10'], ['remo-barra', 4, '8-10'], ['remo-polea', 3, '10-12'], ['face-pull', 3, '15'], ['curl-barra', 3, '10-12']] },
-  { name: 'Pierna', items: [['sentadilla', 4, '6-8'], ['peso-muerto-rumano', 3, '8-10'], ['prensa', 3, '10-12'], ['curl-femoral', 3, '10-12'], ['gemelos-pie', 4, '12-15']] },
-  { name: 'Full body', items: [['sentadilla-goblet', 3, '10'], ['press-mancuernas', 3, '10'], ['remo-mancuerna', 3, '10'], ['press-hombro-mancuernas', 3, '10'], ['plancha', 3, '30 s']] },
+  { name: 'Empuje (pecho, hombro, tríceps)', emoji: '💪', items: [['press-banca', 4, '6-8'], ['press-inclinado-mancuernas', 3, '8-10'], ['press-hombro-mancuernas', 3, '8-10'], ['elevaciones-laterales', 3, '12-15'], ['extension-polea', 3, '10-12']] },
+  { name: 'Tirón (espalda, bíceps)', emoji: '🧗', items: [['dominadas', 4, '6-10'], ['remo-barra', 4, '8-10'], ['remo-polea', 3, '10-12'], ['face-pull', 3, '15'], ['curl-barra', 3, '10-12']] },
+  { name: 'Pierna', emoji: '🦵', items: [['sentadilla', 4, '6-8'], ['peso-muerto-rumano', 3, '8-10'], ['prensa', 3, '10-12'], ['curl-femoral', 3, '10-12'], ['gemelos-pie', 4, '12-15']] },
+  { name: 'Full body', emoji: '⚡', items: [['sentadilla-goblet', 3, '10'], ['press-mancuernas', 3, '10'], ['remo-mancuerna', 3, '10'], ['press-hombro-mancuernas', 3, '10'], ['plancha', 3, '30 s']] },
+  { name: 'Torso', emoji: '🏋️', items: [['press-banca', 4, '6-8'], ['remo-barra', 4, '8-10'], ['press-militar', 3, '8-10'], ['jalon-pecho', 3, '10-12'], ['aperturas', 3, '12'], ['elevaciones-laterales', 3, '12-15']] },
+  { name: 'Brazos (bíceps y tríceps)', emoji: '💥', items: [['curl-barra', 4, '8-10'], ['press-frances', 4, '8-10'], ['curl-martillo', 3, '10-12'], ['extension-polea', 3, '10-12'], ['curl-concentrado', 3, '12'], ['extension-overhead', 3, '12']] },
+  { name: 'Glúteo y femoral', emoji: '🍑', items: [['hip-thrust', 4, '8-10'], ['peso-muerto-rumano', 4, '8-10'], ['bulgara', 3, '10'], ['curl-femoral', 3, '12'], ['patada-gluteo', 3, '15'], ['abduccion', 3, '15']] },
 ];
