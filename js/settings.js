@@ -4,6 +4,7 @@
 import { db } from './db.js';
 import { testConnection, testGroq } from './api.js';
 import { state, saveSettings, esc, toast } from './utils.js';
+import { openSheet } from './sheet.js';
 
 let root;
 const APP_VERSION = '1.3.0';
@@ -55,6 +56,7 @@ export function initSettings(el) {
       const inp = root.querySelector('#groqkey');
       inp.type = inp.type === 'password' ? 'text' : 'password';
     }
+    if (e.target.closest('#info')) return openInfo();
     if (e.target.closest('#export')) exportData();
     if (e.target.closest('#import')) document.getElementById('import-input').click();
     if (e.target.closest('#wipe')) {
@@ -89,6 +91,11 @@ export function renderSettings() {
 
   root.innerHTML = `
     <h1 class="title">Ajustes</h1>
+    <button class="card info-btn" id="info">
+      <span class="e">ℹ️</span>
+      <span class="t"><b>Información</b></span>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
 
     <div class="section-label">Gimnasio</div>
     <div class="list">
@@ -245,4 +252,65 @@ async function importData(file) {
   } catch {
     toast('El archivo no es una copia válida de GymFit');
   }
+}
+
+// ---------- Información: qué se puede hacer en la app ----------
+const INFO = [
+  ['📅', 'Calendario', 'var(--accent)', [
+    'Toca un día para marcar si entrenaste y qué grupos trabajaste.',
+    'En Cardio eliges el deporte: correr, bici, fútbol, natación…',
+    'Los colores del anillo de cada día son los grupos musculares.',
+  ]],
+  ['🏋️', 'Rutinas y ejercicios', 'var(--blue)', [
+    'Crea rutinas a mano, desde plantillas o automáticas según tu tiempo y material.',
+    'Cada ejercicio tiene su animación, los músculos que trabaja y cómo se hace.',
+    'Toca el nombre de un ejercicio para ver su ficha en cualquier momento.',
+  ]],
+  ['⏱️', 'Entrenar', 'var(--orange)', [
+    'Pulsa Empezar entreno y marca cada serie con ✓: el descanso se cuenta solo.',
+    'Ves lo que levantaste la última vez y tus récords.',
+    'Entrenamiento libre con series libres y cardio en minutos.',
+  ]],
+  ['📊', 'Estadísticas', 'var(--purple)', [
+    'Días entrenados, asistencia, rachas y grupos más trabajados.',
+    'Evolución de tus pasos y del peso en cada ejercicio.',
+  ]],
+  ['🍽️', 'Comidas', 'var(--pink)', [
+    'Apunta lo que comes con una foto, describiéndolo por voz o texto, o con el código de barras.',
+    'Introducir a mano: elige platos y alimentos y ajusta las cantidades con − y +.',
+    'El anillo de calorías se pone verde, amarillo o rojo según lo cerca que estés de tu objetivo.',
+  ]],
+  ['🥚', 'Alimentos y platos', 'var(--yellow)', [
+    'Consulta los macros de cada alimento y guarda tus favoritos.',
+    'Añade tus propios alimentos o escanéalos, con su categoría y su ración.',
+    'Busca productos de Mercadona, Consum, Lidl… en internet.',
+  ]],
+  ['📖', 'Recetas', 'var(--accent)', [
+    'Recetas listas para apuntar como comida con un toque.',
+    'Crea recetas con IA: escribe lo que te apetece o elige alimentos, con qué cocinar y cuánto tiempo tienes.',
+    'Te enseña las recetas que ya tienes con esos alimentos.',
+  ]],
+  ['⚖️', 'Peso y actividad', 'var(--blue)', [
+    'Apunta tu peso o lee la captura de Zepp Life y se rellena sola.',
+    'Pasos del día con su objetivo y el gasto de calorías estimado.',
+  ]],
+  ['🔒', 'Tus datos', 'var(--muted)', [
+    'Todo se guarda solo en este iPhone. Haz copias de seguridad desde Ajustes.',
+    'La IA (Gemini, Claude o Groq) solo recibe lo que le pides analizar.',
+  ]],
+];
+
+function openInfo() { openSheet(infoHtml()); }
+
+export function infoHtml() {
+  return `
+    <div class="info-hero">
+      <img src="icons/icon-192.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'), { className: 'e', textContent: '💪' }))">
+      <h2 class="sheet-title">GymFit</h2>
+    </div>
+    ${INFO.map(([e, title, c, lines]) => `
+      <div class="card info-card" style="--c:${c}">
+        <div class="info-head"><span class="e">${e}</span><b>${title}</b></div>
+        <ul>${lines.map(l => `<li>${l}</li>`).join('')}</ul>
+      </div>`).join('')}`;
 }

@@ -505,6 +505,26 @@ h3 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
   background: color-mix(in srgb, var(--c) 13%, transparent); font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
 .grp-pills i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: none; }
 #wk-groups .grp-pills { margin: 8px 0 4px; }
+.info-btn { width: 100%; display: flex; align-items: center; gap: 14px; border: 0; text-align: left; color: var(--text); padding: 14px 16px; }
+.info-btn .e { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; flex: none;
+  background: color-mix(in srgb, var(--blue) 16%, transparent); }
+.info-btn .t { flex: 1; }
+.info-btn b { display: block; font-size: 16px; }
+.info-btn small { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.info-btn svg { opacity: .45; }
+.info-hero { text-align: center; margin: 4px 0 16px; }
+.info-hero img, .info-hero .e { width: 72px; height: 72px; border-radius: 18px; display: inline-grid; place-items: center; font-size: 40px; margin-bottom: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .15); }
+.info-hero .sheet-title { margin: 0; }
+.info-card { padding: 14px 16px; margin-top: 10px; }
+.info-head { display: flex; align-items: center; gap: 12px; }
+.info-head .e { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; font-size: 19px; flex: none;
+  background: color-mix(in srgb, var(--c) 16%, transparent); }
+.info-head b { font-size: 16px; }
+.info-card ul { margin: 10px 0 0; padding: 0; list-style: none; }
+.info-card li { position: relative; padding-left: 16px; font-size: 14.5px; line-height: 1.45; color: var(--text); }
+.info-card li + li { margin-top: 6px; }
+.info-card li::before { content: ''; position: absolute; left: 2px; top: .6em; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
 .zepp-btn { display: flex; align-items: center; justify-content: center; margin: 4px 0 6px; cursor: pointer; }
 .zepp-btn.busy { opacity: .6; pointer-events: none; }
 .ex-grp { width: 100%; display: flex; align-items: center; gap: 12px; border: 0; margin-top: 8px; padding: 14px 16px; border-radius: 16px;
