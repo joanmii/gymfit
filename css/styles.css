@@ -525,6 +525,12 @@ h3 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
 .info-card li { position: relative; padding-left: 16px; font-size: 14.5px; line-height: 1.45; color: var(--text); }
 .info-card li + li { margin-top: 6px; }
 .info-card li::before { content: ''; position: absolute; left: 2px; top: .6em; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+.sugg { margin-top: 14px; }
+.sugg-left { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 0 2px 8px; }
+.sugg-left b { font-family: var(--rounded); font-size: 16px; color: inherit; margin-right: 1px; }
+.sugg-left span:first-child b { color: var(--text); }
+.sugg-done { text-align: center; padding: 10px 0 4px; font-weight: 600; }
+.sugg .food-row { background: var(--card2); }
 .zepp-btn { display: flex; align-items: center; justify-content: center; margin: 4px 0 6px; cursor: pointer; }
 .zepp-btn.busy { opacity: .6; pointer-events: none; }
 .ex-grp { width: 100%; display: flex; align-items: center; gap: 12px; border: 0; margin-top: 8px; padding: 14px 16px; border-radius: 16px;

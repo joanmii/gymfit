@@ -5,7 +5,7 @@ import { db } from './db.js';
 import { analyzeFood, analyzeText, createRecipe } from './api.js';
 import { openScanner, searchProducts, STORES } from './barcode.js';
 import { FOOD_CATS, FOODS, searchFoods, foodsByCat, norm } from './foods.js';
-import { searchRecipes } from './recipes.js';
+import { searchRecipes, RECIPES, ingredientItem } from './recipes.js';
 import { COOKBOOK } from './cookbook.js';
 import { renderWeight, openWeighIn } from './weight.js';
 import { ring, bars } from './charts.js';
@@ -80,6 +80,13 @@ export function initNutrition(el) {
     const tr = e.target.closest('[data-trend]');
     if (tr) { trend = Number(tr.dataset.trend); return renderNutrition(); }
     if (e.target.closest('[data-steps]')) return openSteps();
+    const ss = e.target.closest('[data-sslot]');
+    if (ss) { suggSlot = ss.dataset.sslot; haptic(); return renderNutrition(); }
+    const sg = e.target.closest('[data-sugg]');
+    if (sg) {
+      const { r } = suggList[Number(sg.dataset.sugg)];
+      return openReview(newDraft({ name: r.name, photo: r.photo || null, type: suggCurrent, items: r.items.map(i => ({ ...i })) }));
+    }
     if (e.target.closest('[data-rai]')) return openRecipeAI();
     const rm = e.target.closest('[data-rmine]');
     if (rm) return openRecipe(savedRecipes.find(r => r.id === Number(rm.dataset.rmine)));
@@ -215,7 +222,13 @@ export async function renderNutrition() {
           <div><b class="c-c">${r0(avg.carbs)}g</b><span>hidratos</span></div>
           <div><b class="f-c">${r0(avg.fat)}g</b><span>grasa</span></div>
         </div>` : ''}
-    </div>`;
+    </div>
+    ${suggestCard(meals, S)}`;
+  // Con los favoritos cargados, las sugerencias pueden incluirlos
+  if (+day === +today()) loadFavorites().then(() => {
+    const el = root.querySelector('#sugg');
+    if (el) el.outerHTML = suggestCard(meals, S);
+  });
 }
 
 const modeSeg = () => `
@@ -1878,4 +1891,86 @@ function foodThumb(f) {
   return img && !state.settings.foodEmoji?.[f.name]
     ? `<img src="${esc(img)}" alt="" loading="lazy">`
     : `<span class="e">${foodEmoji(f)}</span>`;
+}
+
+// ---------- Sugerencias: qué comer según lo que te falta hoy ----------
+// Reparto orientativo del día entre comidas (se normaliza con las que quedan)
+const SLOT_W = { desayuno: 0.25, comida: 0.35, merienda: 0.12, cena: 0.28, snack: 0.1 };
+const SLOT_ORDER = ['desayuno', 'comida', 'merienda', 'cena'];
+const slotNow = () => { const h = new Date().getHours() + new Date().getMinutes() / 60; return h < 11 ? 0 : h < 16 ? 1 : h < 19.5 ? 2 : 3; };
+// Tentempiés sueltos para meriendas y picoteo
+const SNACKS = [
+  ['Plátano', '🍌', [['Plátano', 1, 'u']]],
+  ['Yogur proteico', '🥛', [['Yogur proteico / skyr', 1, 'u']]],
+  ['Puñado de almendras', '🌰', [['Almendras', 30]]],
+  ['Manzana', '🍎', [['Manzana', 1, 'u']]],
+  ['Barrita proteica', '🍫', [['Barrita proteica', 1, 'u']]],
+  ['Tostada con pavo', '🍞', [['Pan integral', 40], ['Pechuga de pavo (fiambre)', 3, 'u']]],
+].map(([name, emoji, ings]) => ({ name, emoji, items: ings.map(ingredientItem), types: ['merienda', 'snack'] }));
+
+let suggSlot = null;      // hueco elegido a mano (si no, el que toca por la hora)
+let suggList = [];
+let suggCurrent = 'comida';   // hueco de las sugerencias que se ven
+
+function suggestions(meals, S) {
+  const eaten = sum(meals);
+  const left = { kcal: S.kcal - eaten.kcal, protein: S.protein - eaten.protein, carbs: S.carbs - eaten.carbs, fat: S.fat - eaten.fat };
+  const logged = new Set(meals.map(m => m.type));
+  if (suggSlot && logged.has(suggSlot)) suggSlot = null;   // ya apuntaste ese hueco: se pasa al siguiente
+  // Hueco que toca: el primero desde ahora que no tenga comida apuntada
+  const now = slotNow();
+  const pending = SLOT_ORDER.filter((t, i) => i >= now && !logged.has(t));
+  const slot = suggCurrent = suggSlot || pending[0] || 'snack';
+  const rest = suggSlot ? [slot, ...pending.filter(t => t !== slot)] : (pending.length ? pending : ['snack']);
+  const share = SLOT_W[slot] / rest.reduce((a, t) => a + SLOT_W[t], 0);
+  // Lo que falta repartido entre las comidas que quedan, sin pasar de 1,5 veces lo normal para ese hueco
+  const budget = Math.max(0, Math.min(left.kcal * share, S.kcal * SLOT_W[slot] * 1.5));
+
+  const eatenNames = new Set(meals.map(m => favKey(m.name)));
+  const pool = [
+    ...favCache.filter(f => f.items?.length).map(f => ({ ...f, types: typesOf(f) || ALL_TYPES, fav: true })),
+    ...RECIPES.map(r => ({ ...r, types: dishTypes(r) })),
+    ...COOKBOOK, ...SNACKS,
+  ].filter(r => r.types.includes(slot));
+  const seen = new Set();
+  // Parte de las kcal que debería venir de proteína según lo que falta
+  const pNeed = left.kcal > 0 ? Math.min(0.6, Math.max(0.1, (left.protein * 4) / left.kcal)) : 0.3;
+  suggList = pool
+    .filter(r => { const k = favKey(r.name); if (seen.has(k)) return false; seen.add(k); return true; })
+    .map(r => {
+      const t = sumItems(r.items);
+      const pShare = t.kcal ? (t.protein * 4) / t.kcal : 0;
+      let score = -Math.abs(t.kcal - budget) / Math.max(budget, 150) - Math.abs(pShare - pNeed) * 1.2;
+      if (r.fav) score += 0.15;
+      if (eatenNames.has(favKey(r.name))) score -= 0.6;
+      return { r, t, score, protein: pShare >= 0.3 };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  return { slot, budget, left };
+}
+
+function suggestCard(meals, S) {
+  if (+day !== +today()) return '';
+  const { slot, budget, left } = suggestions(meals, S);
+  const ty = TYPE(slot);
+  const done = left.kcal <= 80;
+  return `
+    <div class="card sugg" id="sugg">
+      <div class="card-head"><h3>💡 Sugerencias</h3>${done ? '' : `<span class="muted small">${ty.emoji} ${ty.name} · ~${r0(budget)} kcal</span>`}</div>
+      ${done ? '<div class="sugg-done">🎯 Ya has llegado a tus calorías de hoy</div>' : `
+      <div class="sugg-left">
+        <span><b>${r0(left.kcal)}</b> kcal</span>
+        <span class="p-c"><b>${r0(Math.max(0, left.protein))}</b>g P</span>
+        <span class="c-c"><b>${r0(Math.max(0, left.carbs))}</b>g H</span>
+        <span class="f-c"><b>${r0(Math.max(0, left.fat))}</b>g G</span>
+      </div>
+      <div class="chips scroll" style="margin:4px 0 8px">${MEAL_TYPES.map(t => `<button class="chip ${t.id === slot ? 'on' : ''}" data-sslot="${t.id}" style="--c:var(--accent)">${t.emoji} ${t.name}</button>`).join('')}</div>
+      <div class="food-list">${suggList.map(({ r, t, protein }, i) => `
+        <button class="food-row" data-sugg="${i}">
+          ${r.photo ? `<img src="${r.photo}" alt="">` : `<span class="e">${r.emoji || ty.emoji}</span>`}
+          <span class="n">${esc(r.name)}<small>${r0(t.kcal)} kcal · P ${r0(t.protein)} g${protein ? ' · 💪 proteico' : ''}${r.fav ? ' · ⭐' : ''}</small></span>
+          <span class="plus">+</span>
+        </button>`).join('')}</div>`}
+    </div>`;
 }

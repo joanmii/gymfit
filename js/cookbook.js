@@ -37,7 +37,12 @@ const RAW = [
     ['Pon el yogur en un bol.', 'Añade la fruta troceada y las nueces.', 'Termina con la miel.']],
 ];
 
+// En qué comidas encaja cada receta (mismo orden que RAW): d desayuno · c comida · m merienda · n cena · s snack
+const TAGS = ['dn', 'd', 'cn', 'cn', 'cn', 'cn', 'dm', 'dn', 'cn', 'dms'];
+const CODES = { d: 'desayuno', c: 'comida', m: 'merienda', n: 'cena', s: 'snack' };
+
 export const COOKBOOK = RAW.map(([name, emoji, minutes, ings, steps], i) => ({
   key: `def-${i}`, name, emoji, minutes, servings: 1, steps, builtin: true,
+  types: [...(TAGS[i] || 'cn')].map(c => CODES[c]),
   items: ings.map(ingredientItem),
 }));
