@@ -84,14 +84,16 @@ function setupRoutineScroller(box) {
     const a = cards[0].getBoundingClientRect(), b = cards[1].getBoundingClientRect();
     box.style.maxHeight = `${Math.ceil(b.bottom - a.top)}px`;
   };
+  const dots = [...(box.parentElement.querySelector('#rt-ind')?.children || [])];
   const paint = () => {
     const r = box.getBoundingClientRect();
-    for (const c of cards) {
+    cards.forEach((c, i) => {
       const cr = c.getBoundingClientRect();
       const vis = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top)) / (cr.height || 1);
       c.style.transform = `scale(${(0.88 + 0.12 * vis).toFixed(3)})`;
       c.style.opacity = (0.25 + 0.75 * vis).toFixed(3);
-    }
+      dots[i]?.classList.toggle('on', vis > 0.6);   // puntos de abajo: los que se ven, marcados
+    });
   };
   let raf = 0;
   box.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(paint); }, { passive: true });
@@ -108,7 +110,8 @@ function routinesHtml() {
   }).join('');
 
   return `
-    ${cards ? `<div class="rt-scroll ${list.length > 2 ? 'on' : ''}" id="rt-scroll">${cards}</div>` : `<div class="card empty"><span class="e">📋</span><b>Aún no tienes rutinas</b>Crea una desde cero o empieza con una plantilla.</div>`}
+    ${cards ? `<div class="rt-scroll ${list.length > 2 ? 'on' : ''}" id="rt-scroll">${cards}</div>
+      ${list.length > 2 ? `<div class="rt-ind" id="rt-ind">${list.map(() => '<i></i>').join('')}</div>` : ''}` : `<div class="card empty"><span class="e">📋</span><b>Aún no tienes rutinas</b>Crea una desde cero o empieza con una plantilla.</div>`}
     <button class="btn primary" id="gen-routine">✨ Crear rutina automática</button>
     <button class="btn primary" id="new-routine">+ Nueva rutina</button>
     <button class="btn tint" id="free-workout">⚡ Entrenamiento libre</button>

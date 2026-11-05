@@ -127,6 +127,9 @@ h3 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
 .rt-scroll.on::-webkit-scrollbar { display: none; }
 .rt-scroll.on .routine { scroll-snap-align: start; transform-origin: center; transition: transform .12s linear, opacity .12s linear; }
 .rt-scroll.on .routine:last-child { margin-bottom: 0; }
+.rt-ind { display: flex; justify-content: center; gap: 6px; margin: -4px 0 16px; }
+.rt-ind i { width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 35%, transparent); transition: background .2s, transform .2s; }
+.rt-ind i.on { background: var(--accent); transform: scale(1.15); }
 .wk-row .span2 { grid-column: span 2; }
 .wk-freeset { display: block; margin: 8px auto 0; font-size: 14px; }
 .rt-grid.one { grid-template-columns: 1fr; }
