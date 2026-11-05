@@ -9,25 +9,104 @@
 import { db } from './db.js';
 import { line } from './charts.js';
 import { openSheet, setSheetContent, closeSheet } from './sheet.js';
-import { state, keyOf, fromKey, today, addDays, daysBetween, startOfWeek, MONTHS_SHORT, esc, r1, toast, haptic, hasAiKey } from './utils.js';
-import { readScaleShot } from './api.js';
+import { state, keyOf, fromKey, today, addDays, daysBetween, startOfWeek, MONTHS, MONTHS_SHORT, esc, r1, toast, haptic } from './utils.js';
 
-// Imagen del carrete → JPEG reducido (las capturas son altas: se deja el lado largo en 1600 px para que se lean los números)
-function shotToJpeg(file, max = 1600) {
+// ---------- Captura de Zepp Life: se lee en el propio móvil (sin IA) ----------
+// Lector de texto Tesseract (código abierto). Se descarga la primera vez que se usa.
+let tessLoad = null;
+function loadTesseract() {
+  return tessLoad ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload = () => resolve(window.Tesseract);
+    s.onerror = () => { tessLoad = null; reject(new Error('No he podido cargar el lector de texto. Revisa tu conexión.')); };
+    document.head.appendChild(s);
+  });
+}
+
+// Imagen → lienzo en blanco y negro: el texto blanco de Zepp Life pasa a negro sobre blanco
+function shotToCanvas(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const k = Math.min(2, 1100 / img.naturalWidth);
       const c = document.createElement('canvas');
       c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const g = c.getContext('2d');
+      g.drawImage(img, 0, 0, c.width, c.height);
+      const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+      for (let i = 0; i < p.length; i += 4) {
+        const v = 0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2];
+        const sat = Math.max(p[i], p[i + 1], p[i + 2]) - Math.min(p[i], p[i + 1], p[i + 2]);
+        // Texto: claro y sin color (blanco) o muy oscuro. Fondo: verde o blanco liso
+        const ink = (v > 200 && sat < 40) ? 0 : 255;
+        p[i] = p[i + 1] = p[i + 2] = ink;
+      }
+      // Si casi todo salió negro (captura con fondo blanco), se usa la versión gris normal
+      let dark = 0;
+      for (let i = 0; i < p.length; i += 400) if (p[i] === 0) dark++;
+      if (dark / (p.length / 400) > 0.5) {
+        g.drawImage(img, 0, 0, c.width, c.height);
+      } else g.putImageData(d, 0, 0);
       URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.85));
+      resolve(c);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No he podido abrir la imagen')); };
     img.src = url;
   });
+}
+
+// Texto del informe de la báscula → datos de la pesada
+export function parseScaleText(raw) {
+  const t = String(raw).replace(/(\d),(\d)/g, '$1.$2').replace(/[ \t]+/g, ' ');
+  const low = t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const grab = (re, min, max) => {
+    const m = low.match(re);
+    const v = m ? parseFloat(m[1]) : NaN;
+    return v >= min && v <= max ? v : null;
+  };
+  // Peso: el primer «NN.NN kg» que no sea el progreso (+1.15kg), el músculo ni la masa ósea
+  let weight = null;
+  for (const m of low.matchAll(/([+-]?)(\d{2,3}(?:\.\d{1,2})?)\s*kg/g)) {
+    const before = low.slice(Math.max(0, m.index - 22), m.index);
+    if (m[1] || /progreso|musculo|osea|objetivo/.test(before)) continue;
+    const v = parseFloat(m[2]);
+    if (v >= 25 && v <= 300) { weight = v; break; }
+  }
+  if (weight == null) weight = grab(/peso\D{0,12}(\d{2,3}(?:\.\d{1,2})?)/, 25, 300);
+  const out = {
+    weight,
+    fat: grab(/grasa corporal\D{0,6}(\d{1,2}(?:\.\d{1,2})?)/, 2, 70),
+    muscle: grab(/musculo\D{0,6}(\d{2,3}(?:\.\d{1,2})?)/, 10, 150),
+    water: grab(/agua\D{0,6}(\d{2}(?:\.\d{1,2})?)/, 20, 85),
+    visceral: grab(/visceral\D{0,6}(\d{1,2}(?:\.\d)?)/, 1, 60),
+    bone: grab(/osea\D{0,6}(\d{1,2}(?:\.\d{1,2})?)/, 0.5, 10),
+    bmr: grab(/basal\D{0,6}(\d{3,4})/, 600, 4500),
+    date: null,
+  };
+  // Fecha: «30 de octubre» (el año, el actual; si quedara en el futuro, el anterior)
+  const dm = low.match(/(\d{1,2}) de ([a-z]+)/);
+  if (dm) {
+    const mi = MONTHS.findIndex(m => m.normalize('NFD').replace(/[\u0300-\u036f]/g, '') === dm[2]);
+    if (mi >= 0) {
+      const t0 = today();
+      let d = new Date(t0.getFullYear(), mi, +dm[1]);
+      if (d > t0) d = new Date(t0.getFullYear() - 1, mi, +dm[1]);
+      if (d.getMonth() === mi) out.date = keyOf(d);
+    }
+  }
+  return out;
+}
+
+async function readScaleShot(file, onProgress) {
+  const [T, canvas] = await Promise.all([loadTesseract(), shotToCanvas(file)]);
+  const { data } = await T.recognize(canvas, 'spa', {
+    logger: m => { if (m.status === 'recognizing text') onProgress?.(m.progress); },
+  });
+  const d = parseScaleText(data.text || '');
+  if (!d.weight) throw new Error('No encuentro el peso en la captura. ¿Es la pantalla del informe de la báscula?');
+  return d;
 }
 
 // Datos que guarda la báscula. good: 'down' = mejor si baja, 'up' = mejor si sube
@@ -280,18 +359,17 @@ export function openWeighIn(entry = null) {
     const kg = body.querySelector('#wkg');
     if (!editing) setTimeout(() => { kg.focus(); kg.select?.(); }, 350);
 
-    // Captura de Zepp Life: la IA lee los datos y rellena el formulario para revisarlo
+    // Captura de Zepp Life: se lee el texto en el móvil y se rellena el formulario para revisarlo
     body.querySelector('#wshot')?.addEventListener('change', async ev => {
       const file = ev.target.files?.[0];
       ev.target.value = '';
       if (!file) return;
-      if (!hasAiKey()) return toast('Añade tu clave de IA en Ajustes para leer capturas');
       const btn = body.querySelector('#wshot-btn');
       const label = btn.firstChild;
       label.textContent = '⏳ Leyendo captura… ';
       btn.classList.add('busy');
       try {
-        const d = await readScaleShot(await shotToJpeg(file));
+        const d = await readScaleShot(file, p => { label.textContent = `⏳ Leyendo captura… ${Math.round(p * 100)} % `; });
         if (d.date && d.date <= keyOf(today())) body.querySelector('#wdate').value = d.date;
         kg.value = r1(d.weight);
         let comp = false;

@@ -2,7 +2,7 @@
 // Pestaña Ajustes
 // =========================================================
 import { db } from './db.js';
-import { testConnection } from './api.js';
+import { testConnection, testGroq } from './api.js';
 import { state, saveSettings, esc, toast } from './utils.js';
 
 let root;
@@ -43,6 +43,17 @@ export function initSettings(el) {
       try { await testConnection(); toast('✅ Conexión correcta'); }
       catch (err) { toast(`❌ ${err.message}`); }
       btn.disabled = false; btn.textContent = 'Probar conexión';
+    }
+    if (e.target.closest('#test-groq')) {
+      const btn = e.target.closest('#test-groq');
+      btn.disabled = true; btn.textContent = 'Probando…';
+      try { await testGroq(); toast('✅ Groq conectado'); }
+      catch (err) { toast(`❌ ${err.message}`); }
+      btn.disabled = false; btn.textContent = 'Probar Groq';
+    }
+    if (e.target.closest('#eye-groq')) {
+      const inp = root.querySelector('#groqkey');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
     }
     if (e.target.closest('#export')) exportData();
     if (e.target.closest('#import')) document.getElementById('import-input').click();
@@ -134,6 +145,26 @@ export function renderSettings() {
       </div>
     </div>
 
+    <div class="section-label">Texto y recetas · opcional</div>
+    <div class="card">
+      <label class="field" style="margin-top:0"><span>Clave de Groq</span>
+        <div class="input-wrap">
+          <input id="groqkey" data-k="groqKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="gsk_..." value="${esc(S.groqKey)}">
+          <button class="icon-btn" id="eye-groq" aria-label="Mostrar u ocultar clave">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </label>
+      <label class="field"><span>Modelo de Groq</span>
+        <input data-k="groqModel" autocapitalize="off" spellcheck="false" value="${esc(S.groqModel)}">
+      </label>
+      <button class="btn secondary" id="test-groq" style="margin-top:14px">Probar Groq</button>
+      <div class="muted small" style="margin-top:12px;line-height:1.45">
+        Gratis en console.groq.com → <b>API Keys</b>. Con ella, describir comidas y crear recetas van con Groq (muy rápido y con más cupo);
+        las fotos siguen con la IA de arriba. Si Groq falla, se usa la de arriba.
+      </div>
+    </div>
+
     <div class="section-label">Tus datos</div>
     <div class="card">
       <button class="btn secondary" id="export">⬇️ Exportar copia de seguridad</button>
@@ -160,7 +191,7 @@ export function renderSettings() {
 
 // ---------- Copia de seguridad ----------
 async function exportData() {
-  const { apiKey, geminiKey, ...settings } = state.settings;   // las claves no se exportan
+  const { apiKey, geminiKey, groqKey, ...settings } = state.settings;   // las claves no se exportan
   const data = {
     app: 'gymfit', version: 1, exportedAt: new Date().toISOString(),
     settings,

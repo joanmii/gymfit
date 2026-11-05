@@ -12,7 +12,7 @@ import { ring, bars } from './charts.js';
 import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet, onSheetCleanup } from './sheet.js';
 import { refreshBodyWeight, hasBodyWeight, bodyKg, stepsKcal, stepsKm, dayWorkout, basalKcal } from './energy.js';
-import { state, saveSettings, hasAiKey, keyOf, today, addDays, fmtLong, cap, esc, r0, r1, toast, haptic, WD_SHORT } from './utils.js';
+import { state, saveSettings, hasAiKey, hasTextAi, keyOf, today, addDays, fmtLong, cap, esc, r0, r1, toast, haptic, WD_SHORT } from './utils.js';
 
 const MEAL_TYPES = [
   { id: 'desayuno', name: 'Desayuno', emoji: '🥐' },
@@ -480,7 +480,7 @@ function repeatMeal(m, type) {
 
 // ---------- Describir por texto o voz ----------
 function openDescribe(initial = '') {
-  const hasKey = hasAiKey();
+  const hasKey = hasTextAi();
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   setSheetContent(`
     <h2 class="sheet-title">Describe tu comida</h2>
@@ -1734,7 +1734,7 @@ function matchRecipes(words) {
 
 let recipeReq = null;
 function openRecipeAI(prev = null) {
-  const hasKey = hasAiKey();
+  const hasKey = hasTextAi();
   const req = recipeReq = prev || { mode: 'text', text: '', foods: [], tools: [], time: null };
   let matches = [];
   openSheet(`

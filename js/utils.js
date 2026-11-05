@@ -58,12 +58,16 @@ const DEFAULTS = {
   geminiKey: '',
   geminiModel: 'gemini-flash-latest',          // fotos (comida, Zepp Life)
   geminiTextModel: 'gemini-flash-lite-latest',  // texto y recetas: más rápido y con más límite diario
+  groqKey: '',                                  // opcional: texto y recetas con Groq (gratis, muy rápido)
+  groqModel: 'llama-3.3-70b-versatile',
   apiKey: '',                      // clave de Claude
   model: 'claude-sonnet-5-5',
 };
 
 // ¿Hay una clave configurada para la IA elegida?
 export const hasAiKey = () => !!(state.settings.provider === 'claude' ? state.settings.apiKey : state.settings.geminiKey)?.trim();
+// Para texto y recetas también vale la clave de Groq
+export const hasTextAi = () => hasAiKey() || !!state.settings.groqKey?.trim();
 
 export const state = {
   workouts: new Map(),   // 'YYYY-MM-DD' -> { date, attended, groups, routine, duration, notes }

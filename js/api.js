@@ -3,7 +3,7 @@
 // - Gemini (Google): tiene nivel GRATUITO, no pide tarjeta  ← por defecto
 // - Claude (Anthropic): de pago por uso
 // =========================================================
-import { state } from './utils.js';
+import { state, hasAiKey } from './utils.js';
 
 const SYSTEM_PROMPT = `Eres un nutricionista experto en estimar raciones de comida, especialmente cocina española.
 Recibirás una foto de un plato o una descripción escrita (o dictada por voz) de lo que ha comido el usuario.
@@ -33,7 +33,11 @@ async function post(url, headers, body) {
     const err = await res.json().catch(() => ({}));
     const msg = err?.error?.message || `Error ${res.status}`;
     if (res.status === 401 || res.status === 403 || /API key not valid/i.test(msg)) throw new Error('La clave de API no es válida.');
-    if (res.status === 429) throw new Error('Has llegado al límite gratuito por ahora. Espera un rato (o hasta mañana) o introduce la comida a mano.');
+    if (res.status === 429) {
+      const e = new Error('Has llegado al límite gratuito por ahora. Espera un rato (o hasta mañana) o introduce la comida a mano.');
+      e.quota = true;   // cada modelo tiene su propio cupo: se prueba con el otro
+      throw e;
+    }
     if (res.status === 404) throw new Error(`El modelo no existe o ya no está disponible. Cámbialo en Ajustes. (${msg})`);
     if (res.status === 500 || res.status === 503 || res.status === 529) {
       const e = new Error('Los servidores de la IA están saturados ahora mismo. Espera un minuto e inténtalo de nuevo, o introduce la comida a mano.');
@@ -125,11 +129,11 @@ async function gemini(parts, { json = true, maxTokens = 8192, system = SYSTEM_PR
   };
   let data;
   try {
-    data = await withRetry(() => call(model));
+    data = await withRetry(() => call(model), [1200]);
   } catch (e) {
-    // Si el modelo elegido sigue saturado, prueba con el modelo ligero (suele tener menos demanda)
-    if (!e.busy || backup === model) throw e;
-    data = await withRetry(() => call(backup), [2000]);
+    // Saturado o sin cupo: se pasa enseguida al otro modelo (tiene su propio cupo y otra demanda)
+    if (!(e.busy || e.quota) || backup === model) throw e;
+    data = await withRetry(() => call(backup), [1500, 3000]);
   }
   const cand = data.candidates?.[0];
   if (!cand) throw new Error(data.promptFeedback?.blockReason ? 'La foto fue bloqueada por el filtro de seguridad.' : 'Respuesta vacía de la IA.');
@@ -173,40 +177,35 @@ export async function analyzeFood(dataUrl, context = '') {
 
 // Descripción por texto o voz: "2 huevos fritos y una tostada con aceite"
 export async function analyzeText(description) {
-  const prompt = `El usuario ha comido esto: ${description}`;
-  const text = state.settings.provider === 'claude'
-    ? await claude([{ type: 'text', text: prompt }])
-    : await gemini([{ text: prompt }], { text: true });
-  return parseResult(text);
+  return parseResult(await textAI(`El usuario ha comido esto: ${description}`, { system: SYSTEM_PROMPT }));
 }
 
-// ---------- Captura de la báscula (Zepp Life u otra app) ----------
-const SCALE_PROMPT = `Lees capturas de pantalla de apps de básculas inteligentes (Zepp Life, Mi Fit, Renpho, etc.).
-Extrae los datos de la pesada y responde ÚNICAMENTE con JSON válido, sin texto adicional:
-{"date":"YYYY-MM-DD","weight":0,"fat":0,"muscle":0,"water":0,"visceral":0,"bone":0,"bmr":0}
-- weight en kg; fat (grasa corporal) y water (agua) en %; muscle (músculo) y bone (masa ósea) en kg;
-  visceral = grasa visceral (número); bmr = metabolismo basal en kcal.
-- Usa null en lo que no aparezca. No confundas «Proteína %» con músculo.
-- date: la fecha de la pesada que se vea en la captura; si no tiene año, usa el año indicado por el usuario.`;
+// ---------- Groq (opcional, gratis y muy rápido): solo texto ----------
+async function groq(prompt, { system, temperature = 0.2, maxTokens = 2048 } = {}) {
+  const S = state.settings;
+  const data = await post('https://api.groq.com/openai/v1/chat/completions', { authorization: `Bearer ${requireKey(S.groqKey)}` }, {
+    model: (S.groqModel || 'llama-3.3-70b-versatile').trim(),
+    messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+    temperature, max_tokens: maxTokens,
+    response_format: { type: 'json_object' },
+  });
+  return data.choices?.[0]?.message?.content || '';
+}
 
-export async function readScaleShot(dataUrl) {
-  const base64 = dataUrl.split(',')[1];
-  const t = new Date();
-  const prompt = `Hoy es ${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}.`;
-  const text = state.settings.provider === 'claude'
-    ? await claude([
-        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
-        { type: 'text', text: prompt },
-      ], { system: SCALE_PROMPT, maxTokens: 400 })
-    : await gemini([{ inline_data: { mime_type: 'image/jpeg', data: base64 } }, { text: prompt }], { system: SCALE_PROMPT, temperature: 0 });
-  const match = (text || '').match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No he podido leer la captura. Prueba con otra.');
-  const j = JSON.parse(match[0]);
-  const n = v => { const x = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(x) && x > 0 ? x : null; };
-  const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : null };
-  for (const k of ['weight', 'fat', 'muscle', 'water', 'visceral', 'bone', 'bmr']) out[k] = n(j[k]);
-  if (!out.weight) throw new Error('No encuentro el peso en la captura. ¿Es la pantalla del informe de la báscula?');
-  return out;
+// Texto y recetas: con Groq si hay clave (gasta su cupo, no el de las fotos); si falla, con la IA principal
+async function textAI(prompt, { system, temperature = 0.2 } = {}) {
+  if (state.settings.groqKey?.trim()) {
+    try { return await groq(prompt, { system, temperature }); }
+    catch (e) { if (!hasAiKey()) throw e; }
+  }
+  return state.settings.provider === 'claude'
+    ? claude([{ type: 'text', text: prompt }], { system, maxTokens: 1500, temperature })
+    : gemini([{ text: prompt }], { system, temperature, text: true });
+}
+
+export async function testGroq() {
+  await groq('Responde {"ok":true}', { system: 'Responde solo JSON.', maxTokens: 20 });
+  return true;
 }
 
 // ---------- Recetas con lo que tienes en casa ----------
@@ -228,9 +227,7 @@ export async function createRecipe(req) {
     r.tools?.length ? `Cocinar con: ${r.tools.join(', ')}.` : '',
     r.time ? `Tiempo máximo: ${r.time >= 45 ? 'unos 45 minutos o más' : `${r.time} minutos`}.` : '',
   ].filter(Boolean).join('\n');
-  const text = state.settings.provider === 'claude'
-    ? await claude([{ type: 'text', text: prompt }], { system: RECIPE_PROMPT, maxTokens: 1500, temperature: 0.8 })
-    : await gemini([{ text: prompt }], { system: RECIPE_PROMPT, temperature: 0.8, text: true });
+  const text = await textAI(prompt, { system: RECIPE_PROMPT, temperature: 0.8 });
   const match = (text || '').match(/\{[\s\S]*\}/);
   if (!match) throw new Error('No he podido leer la receta. Inténtalo otra vez.');
   const j = JSON.parse(match[0]);
