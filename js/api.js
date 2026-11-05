@@ -208,8 +208,9 @@ export async function readScaleShot(dataUrl) {
 }
 
 // ---------- Recetas con lo que tienes en casa ----------
-const RECIPE_PROMPT = `Eres un cocinero y nutricionista. El usuario te dice qué ingredientes tiene.
-Crea UNA receta sencilla, rica y saludable para 1 persona usando sobre todo esos ingredientes
+const RECIPE_PROMPT = `Eres un cocinero y nutricionista. El usuario te dice qué ingredientes tiene o qué le apetece,
+y a veces con qué quiere cocinar (sartén, olla, horno, airfryer, microondas o sin cocinar) y cuánto tiempo tiene.
+Crea UNA receta sencilla, rica y saludable para 1 persona que respete eso, usando sobre todo sus ingredientes
 (puedes añadir básicos de despensa: sal, especias, aceite de oliva, ajo, cebolla).
 Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta forma exacta:
 {"name":"","emoji":"","minutes":0,"ingredients":[{"name":"","grams":0,"calories":0,"protein":0,"carbs":0,"fat":0}],"steps":[""]}
@@ -217,8 +218,14 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta forma exact
 - minutes: tiempo total aproximado. steps: de 3 a 6 pasos cortos y claros.
 - calories en kcal; protein, carbs y fat en gramos, para la cantidad de cada ingrediente.`;
 
-export async function createRecipe(ingredients) {
-  const prompt = `Tengo: ${ingredients}`;
+export async function createRecipe(req) {
+  const r = typeof req === 'string' ? { text: req } : req;
+  const prompt = [
+    r.foods?.length ? `Ingredientes que tengo: ${r.foods.join(', ')}.` : '',
+    r.text ? `Lo que quiero: ${r.text}` : '',
+    r.tools?.length ? `Cocinar con: ${r.tools.join(', ')}.` : '',
+    r.time ? `Tiempo máximo: ${r.time >= 45 ? 'unos 45 minutos o más' : `${r.time} minutos`}.` : '',
+  ].filter(Boolean).join('\n');
   const text = state.settings.provider === 'claude'
     ? await claude([{ type: 'text', text: prompt }], { system: RECIPE_PROMPT, maxTokens: 1500, temperature: 0.8 })
     : await gemini([{ text: prompt }], { system: RECIPE_PROMPT, temperature: 0.8 });
