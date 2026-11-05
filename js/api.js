@@ -20,10 +20,14 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional ni bloques de código
 // ---------- Utilidades comunes ----------
 async function post(url, headers, body) {
   let res;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 60000);
   try {
-    res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
-  } catch {
-    throw new Error('Sin conexión. Revisa tu internet e inténtalo de nuevo.');
+    res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal: ctrl.signal });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? 'La IA está tardando demasiado. Inténtalo de nuevo en un momento.' : 'Sin conexión. Revisa tu internet e inténtalo de nuevo.');
+  } finally {
+    clearTimeout(timer);
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -82,37 +86,39 @@ function parseResult(text) {
 
 // ---------- Gemini (gratis) ----------
 const GEMINI_FALLBACK = 'gemini-flash-lite-latest';
-const SLOW_KEY = 'gymfit-gemini-nofast';   // modelos que no aceptan desactivar el razonamiento
-const slowModels = () => { try { return JSON.parse(localStorage.getItem(SLOW_KEY) || '[]'); } catch { return []; } };
+// Razonamiento mínimo para que responda rápido. Los modelos nuevos (Gemini 3) usan thinkingLevel,
+// los 2.5 usan thinkingBudget; el que no admite una opción devuelve 400 y se prueba la siguiente.
+const THINK = [{ thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }, { thinkingBudget: 0 }, null];
+const THINK_KEY = 'gymfit-gemini-think';
+const thinkMap = () => { try { return JSON.parse(localStorage.getItem(THINK_KEY) || '{}'); } catch { return {}; } };
 
-async function gemini(parts, { json = true, maxTokens = 8192 } = {}) {
+async function gemini(parts, { json = true, maxTokens = 8192, system = SYSTEM_PROMPT, temperature = 0.2 } = {}) {
   const S = state.settings;
   const key = requireKey(S.geminiKey);
   const model = (S.geminiModel || 'gemini-flash-latest').trim();
-  const request = (m, fast) => post(
+  const request = (m, think) => post(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
     { 'x-goog-api-key': key },
     {
-      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts }],
       generationConfig: {
-        temperature: 0.2, maxOutputTokens: maxTokens,
+        temperature, maxOutputTokens: maxTokens,
         ...(json ? { responseMimeType: 'application/json' } : {}),
-        // Sin «pensar» antes de responder: mucho más rápido y de sobra para estimar raciones
-        ...(fast ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+        ...(think ? { thinkingConfig: think } : {}),
       },
     }
   );
-  // Si un modelo no admite desactivar el razonamiento, se recuerda y se llama sin esa opción
   const call = async m => {
-    const noFast = slowModels();
-    if (noFast.includes(m)) return request(m, false);
-    try {
-      return await request(m, true);
-    } catch (e) {
-      if (e.status !== 400 || !/think/i.test(e.message)) throw e;
-      try { localStorage.setItem(SLOW_KEY, JSON.stringify([...noFast, m])); } catch { /* nada */ }
-      return request(m, false);
+    const start = thinkMap()[m] ?? 0;
+    for (let i = start; i < THINK.length; i++) {
+      try {
+        const r = await request(m, THINK[i]);
+        if (i !== start) { try { localStorage.setItem(THINK_KEY, JSON.stringify({ ...thinkMap(), [m]: i })); } catch { /* nada */ } }
+        return r;
+      } catch (e) {
+        if (e.status !== 400 || i === THINK.length - 1) throw e;
+      }
     }
   };
   let data;
@@ -129,7 +135,7 @@ async function gemini(parts, { json = true, maxTokens = 8192 } = {}) {
 }
 
 // ---------- Claude (de pago) ----------
-async function claude(content, { maxTokens = 1500, system = SYSTEM_PROMPT } = {}) {
+async function claude(content, { maxTokens = 1500, system = SYSTEM_PROMPT, temperature } = {}) {
   const S = state.settings;
   const data = await post('https://api.anthropic.com/v1/messages', {
     'x-api-key': requireKey(S.apiKey),
@@ -140,6 +146,7 @@ async function claude(content, { maxTokens = 1500, system = SYSTEM_PROMPT } = {}
     model: S.model || 'claude-sonnet-5-5',
     max_tokens: maxTokens,
     ...(system ? { system } : {}),
+    ...(temperature != null ? { temperature } : {}),
     messages: [{ role: 'user', content }],
   });
   return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
@@ -169,6 +176,69 @@ export async function analyzeText(description) {
     ? await claude([{ type: 'text', text: prompt }])
     : await gemini([{ text: prompt }]);
   return parseResult(text);
+}
+
+// ---------- Captura de la báscula (Zepp Life u otra app) ----------
+const SCALE_PROMPT = `Lees capturas de pantalla de apps de básculas inteligentes (Zepp Life, Mi Fit, Renpho, etc.).
+Extrae los datos de la pesada y responde ÚNICAMENTE con JSON válido, sin texto adicional:
+{"date":"YYYY-MM-DD","weight":0,"fat":0,"muscle":0,"water":0,"visceral":0,"bone":0,"bmr":0}
+- weight en kg; fat (grasa corporal) y water (agua) en %; muscle (músculo) y bone (masa ósea) en kg;
+  visceral = grasa visceral (número); bmr = metabolismo basal en kcal.
+- Usa null en lo que no aparezca. No confundas «Proteína %» con músculo.
+- date: la fecha de la pesada que se vea en la captura; si no tiene año, usa el año indicado por el usuario.`;
+
+export async function readScaleShot(dataUrl) {
+  const base64 = dataUrl.split(',')[1];
+  const t = new Date();
+  const prompt = `Hoy es ${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}.`;
+  const text = state.settings.provider === 'claude'
+    ? await claude([
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+        { type: 'text', text: prompt },
+      ], { system: SCALE_PROMPT, maxTokens: 400 })
+    : await gemini([{ inline_data: { mime_type: 'image/jpeg', data: base64 } }, { text: prompt }], { system: SCALE_PROMPT, temperature: 0 });
+  const match = (text || '').match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No he podido leer la captura. Prueba con otra.');
+  const j = JSON.parse(match[0]);
+  const n = v => { const x = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(x) && x > 0 ? x : null; };
+  const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : null };
+  for (const k of ['weight', 'fat', 'muscle', 'water', 'visceral', 'bone', 'bmr']) out[k] = n(j[k]);
+  if (!out.weight) throw new Error('No encuentro el peso en la captura. ¿Es la pantalla del informe de la báscula?');
+  return out;
+}
+
+// ---------- Recetas con lo que tienes en casa ----------
+const RECIPE_PROMPT = `Eres un cocinero y nutricionista. El usuario te dice qué ingredientes tiene.
+Crea UNA receta sencilla, rica y saludable para 1 persona usando sobre todo esos ingredientes
+(puedes añadir básicos de despensa: sal, especias, aceite de oliva, ajo, cebolla).
+Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta forma exacta:
+{"name":"","emoji":"","minutes":0,"ingredients":[{"name":"","grams":0,"calories":0,"protein":0,"carbs":0,"fat":0}],"steps":[""]}
+- Nombres en español, cortos. emoji: un único emoji de comida que represente el plato.
+- minutes: tiempo total aproximado. steps: de 3 a 6 pasos cortos y claros.
+- calories en kcal; protein, carbs y fat en gramos, para la cantidad de cada ingrediente.`;
+
+export async function createRecipe(ingredients) {
+  const prompt = `Tengo: ${ingredients}`;
+  const text = state.settings.provider === 'claude'
+    ? await claude([{ type: 'text', text: prompt }], { system: RECIPE_PROMPT, maxTokens: 1500, temperature: 0.8 })
+    : await gemini([{ text: prompt }], { system: RECIPE_PROMPT, temperature: 0.8 });
+  const match = (text || '').match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No he podido leer la receta. Inténtalo otra vez.');
+  const j = JSON.parse(match[0]);
+  const items = (j.ingredients || []).map(i => ({
+    name: i.name || 'Ingrediente',
+    grams: Math.round(+i.grams || 0),
+    kcal: Math.round(+i.calories || 0),
+    protein: +(+i.protein || 0).toFixed(1),
+    carbs: +(+i.carbs || 0).toFixed(1),
+    fat: +(+i.fat || 0).toFixed(1),
+  }));
+  if (!items.length) throw new Error('La IA no ha devuelto ingredientes. Prueba a escribirlos de otra forma.');
+  return {
+    name: j.name || 'Receta', emoji: [...String(j.emoji || '🍽️')][0] || '🍽️',
+    minutes: Math.round(+j.minutes || 0) || null, servings: 1, items,
+    steps: (j.steps || []).map(String).filter(Boolean),
+  };
 }
 
 // Prueba rápida de la clave

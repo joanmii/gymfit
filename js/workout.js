@@ -6,11 +6,11 @@ import { db } from './db.js';
 import { line } from './charts.js';
 import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet, onSheetCleanup } from './sheet.js';
-import { EX } from './exercises.js';
+import { EX, isCardio } from './exercises.js';
 import { PARTS, partColor } from './bodymap.js';
-import { mountLibrary, renderRoutines, showExercise } from './routines.js';
+import { mountLibrary, renderRoutines, showExercise, groupPills } from './routines.js';
 import { refreshBodyWeight, workoutKcal } from './energy.js';
-import { state, MUSCLES, keyOf, today, fromKey, esc, toast, haptic } from './utils.js';
+import { state, MUSCLES, M, keyOf, today, fromKey, esc, toast, haptic } from './utils.js';
 
 // El entreno en curso se guarda aquí a cada cambio, así no se pierde si cierras la hoja o la app
 const ACTIVE_KEY = 'gymfit-active';
@@ -51,6 +51,7 @@ export function sessionStats(s) {
 
 // Récord, 1RM, gráfica y últimas sesiones de un ejercicio (ficha del ejercicio y Estadísticas)
 export function progressBlock(exId) {
+  if (isCardio(exId)) return '';
   const hist = exHistory(exId);
   if (!hist.length) return '';
   const best = bestOf(hist);
@@ -70,7 +71,7 @@ export function progressBlock(exId) {
 // ---------- Empezar / continuar ----------
 function newItem(exId, plan = {}) {
   const last = exHistory(exId).at(-1)?.sets || [];
-  const n = Math.max(1, parseInt(plan.sets, 10) || last.length || 3);
+  const n = isCardio(exId) ? Math.max(1, parseInt(plan.sets, 10) || 1) : Math.max(1, parseInt(plan.sets, 10) || last.length || 3);
   return {
     ex: exId,
     target: plan.reps ? String(plan.reps) : '',
@@ -103,7 +104,7 @@ export function openWorkout() {
 }
 
 const progress = s => {
-  const all = s.items.flatMap(i => i.sets);
+  const all = [...s.items.flatMap(i => i.sets), ...(s.free || [])];
   return { done: all.filter(x => x.done).length, total: all.length };
 };
 
@@ -111,6 +112,13 @@ const progress = s => {
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 function setRow(it, x, st, k) {
+  if (isCardio(it.ex)) {
+    return `<div class="wk-row ${st.done ? 'done' : ''}">
+    <span class="n">${k + 1}</span>
+    <input class="span2" data-x="${x}" data-k="${k}" data-f="reps" inputmode="numeric" placeholder="${esc(it.target || 'min')}" value="${esc(st.reps)}" aria-label="Minutos">
+    <button class="wk-check" data-done="${x}-${k}" aria-label="Hecho">${CHECK}</button>
+  </div>`;
+  }
   return `<div class="wk-row ${st.done ? 'done' : ''}">
     <span class="n">${k + 1}</span>
     <input data-x="${x}" data-k="${k}" data-f="kg" inputmode="decimal" placeholder="kg" value="${esc(st.kg)}" aria-label="Kilos serie ${k + 1}">
@@ -122,16 +130,20 @@ function setRow(it, x, st, k) {
 function itemHtml(it, x) {
   const ex = EX[it.ex];
   const hist = exHistory(it.ex), last = hist.at(-1), best = bestOf(hist);
-  const sub = last
-    ? `Última vez: ${fmtKg(last.top.kg)} kg × ${last.top.reps}${best.kg > last.top.kg ? ` · Récord ${fmtKg(best.kg)} kg` : ''}`
-    : ex.p.map(p => PARTS[p].name).join(', ');
+  const sub = ex.cardio
+    ? (last ? `Última vez: ${last.top.reps} min` : 'Cardio')
+    : last
+      ? `Última vez: ${fmtKg(last.top.kg)} kg × ${last.top.reps}${best.kg > last.top.kg ? ` · Récord ${fmtKg(best.kg)} kg` : ''}`
+      : ex.p.map(p => PARTS[p].name).join(', ');
   return `<div class="card wk-ex">
     <div class="item-top">
-      <span class="rt-num" style="--c:${partColor(ex.p[0])}">${x + 1}</span>
+      <span class="rt-num" style="--c:${ex.cardio ? M.cardio.color : partColor(ex.p[0])}">${x + 1}</span>
       <div class="rt-name"><b class="ex-link" data-info="${it.ex}">${esc(ex.name)}</b><small>${esc(sub)}</small></div>
       <button class="icon-btn" data-rmex="${x}" aria-label="Quitar ejercicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <div class="wk-row wk-hdr"><span>Serie</span><span>Kg</span><span>Reps${it.target ? ` · ${esc(it.target)}` : ''}</span><span></span></div>
+    ${ex.cardio
+      ? `<div class="wk-row wk-hdr"><span></span><span class="span2">Minutos${it.target ? ` · ${esc(it.target)}` : ''}</span><span></span></div>`
+      : `<div class="wk-row wk-hdr"><span>Serie</span><span>Kg</span><span>Reps${it.target ? ` · ${esc(it.target)}` : ''}</span><span></span></div>`}
     ${it.sets.map((st, k) => setRow(it, x, st, k)).join('')}
     <div class="wk-foot">
       <button class="link" data-addset="${x}">+ Añadir serie</button>
@@ -140,9 +152,17 @@ function itemHtml(it, x) {
   </div>`;
 }
 
-const itemsHtml = s => s.items.length
-  ? s.items.map(itemHtml).join('')
-  : '<div class="card empty"><span class="e">🏋️</span><b>Entreno vacío</b>Añade los ejercicios que vayas haciendo.</div>';
+// Series libres: series sin ejercicio, solo para marcarlas como hechas
+const freeHtml = s => (s.free || []).length ? `<div class="card wk-ex">
+    <div class="item-top"><span class="rt-num" style="--c:var(--muted)">✓</span><div class="rt-name"><b>Series libres</b></div></div>
+    ${s.free.map((st, k) => `<div class="wk-row ${st.done ? 'done' : ''}"><span class="n">${k + 1}</span><span class="span2 muted small">Serie libre</span>
+      <button class="wk-check" data-freedone="${k}" aria-label="Serie hecha">${CHECK}</button></div>`).join('')}
+    <div class="wk-foot"><button class="link muted" data-rmfree>Quitar la última</button></div>
+  </div>` : '';
+
+const itemsHtml = s => (s.items.length || (s.free || []).length)
+  ? s.items.map(itemHtml).join('') + freeHtml(s)
+  : '<div class="card empty"><span class="e">🏋️</span><b>Entreno vacío</b></div>';
 
 function workoutHtml(s) {
   const p = progress(s);
@@ -152,9 +172,11 @@ function workoutHtml(s) {
         <span class="muted small">⏱ <b id="wk-clock">${fmtClock(Date.now() - s.startedAt)}</b> · <span id="wk-count">${p.done}/${p.total}</span> series</span></div>
       <button class="btn small primary" id="wk-finish">Terminar</button>
     </div>
+    <div id="wk-groups">${groupPills(s)}</div>
     <div class="bar wk-bar" style="--c:var(--accent)"><i id="wk-bar" style="width:${p.total ? p.done / p.total * 100 : 0}%"></i></div>
     <div id="wk-items">${itemsHtml(s)}</div>
     <button class="btn secondary" id="wk-addex">+ Añadir ejercicio</button>
+    <button class="link wk-freeset" id="wk-freeset">+ Añadir serie libre</button>
     <button class="btn ghost danger" id="wk-discard">Descartar entreno</button>
     <div class="wk-rest hidden" id="wk-rest">
       <div class="wk-rest-t"><small>Descanso</small><b id="wk-rest-t">0:00</b></div>
@@ -166,7 +188,11 @@ function workoutHtml(s) {
 
 function mountWorkout(body, s) {
   const save = () => persist(s);
-  const redraw = () => { body.querySelector('#wk-items').innerHTML = itemsHtml(s); updateProgress(); };
+  const redraw = () => {
+    body.querySelector('#wk-items').innerHTML = itemsHtml(s);
+    body.querySelector('#wk-groups').innerHTML = groupPills(s);
+    updateProgress();
+  };
   const updateProgress = () => {
     const p = progress(s);
     body.querySelector('#wk-count').textContent = `${p.done}/${p.total}`;
@@ -241,6 +267,16 @@ function mountWorkout(body, s) {
       s.items.splice(x, 1); save(); return redraw();
     }
     if (e.target.closest('#wk-addex')) return openPicker(s);
+    if (e.target.closest('#wk-freeset')) { (s.free ||= []).push({ done: false }); save(); haptic(); return redraw(); }
+    if (e.target.closest('[data-rmfree]')) { s.free.pop(); save(); return redraw(); }
+    const fd = e.target.closest('[data-freedone]');
+    if (fd) {
+      const st = s.free[Number(fd.dataset.freedone)];
+      st.done = !st.done;
+      if (st.done) { unlockAudio(); s.restEnd = Date.now() + (state.settings.rest || 90) * 1000; }
+      save(); haptic(); redraw(); tick();
+      return;
+    }
     if (e.target.closest('#wk-discard')) {
       if (!confirm('¿Descartar este entreno? No se guardará nada.')) return;
       persist(null); closeSheet(); toast('Entreno descartado');
@@ -270,19 +306,23 @@ async function finishWorkout(s) {
   const items = s.items
     .map(it => ({ ex: it.ex, sets: it.sets.filter(x => x.done).map(x => ({ kg: num(x.kg) ?? 0, reps: num(x.reps) ?? 0 })) }))
     .filter(i => i.sets.length);
-  if (!items.length) return toast('Marca al menos una serie como hecha ✓');
+  const freeDone = (s.free || []).filter(x => x.done).length;
 
   const prevBest = Object.fromEntries(items.map(i => [i.ex, bestOf(exHistory(i.ex))]));
   const endedAt = Date.now();
   const duration = Math.max(1, Math.round((endedAt - s.startedAt) / 60000));
-  const session = { date: s.date, routine: s.routine, name: s.name, startedAt: s.startedAt, endedAt, duration, items };
-  session.id = await db.putSession(session);
-  state.sessions.push(session);
+  const session = { date: s.date, routine: s.routine, name: s.name, startedAt: s.startedAt, endedAt, duration, items, free: freeDone };
+  // Se puede terminar aunque no haya series: el día queda marcado en el calendario
+  if (items.length || freeDone) {
+    session.id = await db.putSession(session);
+    state.sessions.push(session);
+  }
 
   // Marca el día en el calendario con los grupos trabajados
   const prev = state.workouts.get(s.date);
   const groups = new Set(prev?.attended ? prev.groups : []);
   items.forEach(i => EX[i.ex]?.p.forEach(p => groups.add(PARTS[p].group)));
+  if (items.some(i => isCardio(i.ex))) groups.add('cardio');
   const record = {
     date: s.date,
     attended: true,
@@ -308,8 +348,10 @@ async function finishWorkout(s) {
     <div class="card"><div class="totals-row">
       <div><b>${duration}</b><span>min</span></div>
       <div><b>${items.length}</b><span>ejercicios</span></div>
-      <div><b>${st.sets}</b><span>series</span></div>
-      <div><b>${fmtKg(st.volume)}</b><span>kg totales</span></div>
+      <div><b>${st.sets + freeDone}</b><span>series</span></div>
+      ${items.length && items.every(i => isCardio(i.ex))
+        ? `<div><b>${items.flatMap(i => i.sets).reduce((a, x) => a + (x.reps || 0), 0)}</b><span>min de cardio</span></div>`
+        : `<div><b>${fmtKg(st.volume)}</b><span>kg totales</span></div>`}
     </div>
     <div class="burn-line">🔥 ≈ <b>${kcal}</b> kcal quemadas</div></div>
     ${prs.length ? `<div class="section-label">Nuevos récords</div>${prs.map(r => `<div class="alert pr"><span class="e">🏆</span><div><b>${esc(EX[r.ex].name)}</b>: ${fmtKg(r.kg)} kg <span class="muted">(antes ${fmtKg(prevBest[r.ex].kg)} kg)</span></div></div>`).join('')}` : ''}

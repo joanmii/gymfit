@@ -9,7 +9,26 @@
 import { db } from './db.js';
 import { line } from './charts.js';
 import { openSheet, setSheetContent, closeSheet } from './sheet.js';
-import { state, keyOf, fromKey, today, addDays, daysBetween, startOfWeek, MONTHS_SHORT, esc, r1, toast, haptic } from './utils.js';
+import { state, keyOf, fromKey, today, addDays, daysBetween, startOfWeek, MONTHS_SHORT, esc, r1, toast, haptic, hasAiKey } from './utils.js';
+import { readScaleShot } from './api.js';
+
+// Imagen del carrete → JPEG reducido (las capturas son altas: se deja el lado largo en 1600 px para que se lean los números)
+function shotToJpeg(file, max = 1600) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No he podido abrir la imagen')); };
+    img.src = url;
+  });
+}
 
 // Datos que guarda la báscula. good: 'down' = mejor si baja, 'up' = mejor si sube
 const METRICS = [
@@ -242,6 +261,8 @@ export function openWeighIn(entry = null) {
 
   openSheet(`
     <h2 class="sheet-title">${editing ? 'Editar pesada' : 'Apuntar peso'}</h2>
+    ${editing ? '' : `<label class="btn secondary zepp-btn" id="wshot-btn">📸 Leer captura de Zepp Life
+      <input id="wshot" type="file" accept="image/*" hidden></label>`}
     <label class="field"><span>Fecha</span><input id="wdate" type="date" max="${keyOf(today())}" value="${e.date}"></label>
     <label class="field"><span>Peso (kg)</span>
       <input id="wkg" class="w-input" type="number" inputmode="decimal" step="0.1" min="0" value="${e.weight ?? ''}" placeholder="0,0">
@@ -258,6 +279,36 @@ export function openWeighIn(entry = null) {
     <button class="btn primary" id="wsave" style="margin-top:16px">Guardar</button>`, body => {
     const kg = body.querySelector('#wkg');
     if (!editing) setTimeout(() => { kg.focus(); kg.select?.(); }, 350);
+
+    // Captura de Zepp Life: la IA lee los datos y rellena el formulario para revisarlo
+    body.querySelector('#wshot')?.addEventListener('change', async ev => {
+      const file = ev.target.files?.[0];
+      ev.target.value = '';
+      if (!file) return;
+      if (!hasAiKey()) return toast('Añade tu clave de IA en Ajustes para leer capturas');
+      const btn = body.querySelector('#wshot-btn');
+      const label = btn.firstChild;
+      label.textContent = '⏳ Leyendo captura… ';
+      btn.classList.add('busy');
+      try {
+        const d = await readScaleShot(await shotToJpeg(file));
+        if (d.date && d.date <= keyOf(today())) body.querySelector('#wdate').value = d.date;
+        kg.value = r1(d.weight);
+        let comp = false;
+        body.querySelectorAll('[data-m]').forEach(inp => {
+          const v = d[inp.dataset.m];
+          if (v != null) { inp.value = inp.step === '1' ? Math.round(v) : r1(v); comp = true; }
+        });
+        if (comp) body.querySelector('.w-more').open = true;
+        haptic();
+        toast('Datos leídos ✓ Revísalos y guarda');
+      } catch (err) {
+        toast(err.message);
+      } finally {
+        label.textContent = '📸 Leer captura de Zepp Life ';
+        btn.classList.remove('busy');
+      }
+    });
 
     body.querySelector('#wdel')?.addEventListener('click', async () => {
       if (!confirm('¿Borrar esta pesada?')) return;

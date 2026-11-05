@@ -103,7 +103,8 @@ function solveFront(P) {
     const along = v[0] * u[0] + v[1] * u[1], across = v[0] * r[0] + v[1] * r[1];
     return add(hip, mul(u, along), mul(r, -across));
   };
-  const shA = add(shC, mul(r, L.SW), mul(u, -2)), shB = add(shC, mul(r, -L.SW), mul(u, -2));
+  const su = P.su || 0;                           // encoger hombros
+  const shA = add(shC, mul(r, L.SW), mul(u, -2 + su)), shB = add(shC, mul(r, -L.SW), mul(u, -2 + su));
   const hpA = add(hip, mul(r, L.HW)), hpB = add(hip, mul(r, -L.HW));
   const al = P.al ?? 1, alB = P.alB ?? al, eb = P.eb ?? 1;
   const [elA, haA] = ik(shA, P.ha, L.UA * al, L.FA * al, eb);
@@ -252,6 +253,7 @@ function drawFront(J, H) {
   s += poly(TORSO_FRONT.map(p => fPt(J, p)), 'f');
   for (const z of ['chest', 'abs', 'upperback', 'trap']) if (H[z]) for (const zz of FRONT_ZONES[z]) s += poly(zz.map(p => fPt(J, p)), 'h');
   if (J.legsFront) s += legs;
+  s += line(fPt(J, [0.9, 9]), J.shA, 9, H.trap ? 'h' : 'f') + line(fPt(J, [0.9, -9]), J.shB, 9, H.trap ? 'h' : 'f');
   s += line(J.shC, J.neck, 8, H.trap ? 'h' : 'f') + dot(J.head, L.HR, 'f');
   for (const [shp, el, ha] of [[J.shA, J.elA, J.haA], [J.shB, J.elB, J.haB]]) {
     s += line(shp, el, 8.5, c('upperarm')) + line(el, ha, 7, c('forearm')) + dot(ha, 4.3, 'f');
@@ -302,6 +304,7 @@ function drawProps(props, J, layer) {
         break;
       }
       case 'handle': s += dot(attach(J, p.at), 3.6, 'e'); break;
+      case 'vbar': { const c = attach(J, p.at); s += line(add(c, [0, -10]), add(c, [0, 10]), 4.5, 'e'); break; }
       case 'plate': s += dot(attach(J, p.at), 10, 'plate', 3.5) + dot(attach(J, p.at), 2.5, 'e'); break;
       case 'wheel': s += dot(attach(J, p.at), 9.5, 'plate', 3.5) + dot(attach(J, p.at), 2.5, 'e'); break;
       case 'pad': s += dot(attach(J, p.at), p.r || 6, 'pf'); break;

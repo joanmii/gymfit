@@ -11,6 +11,7 @@ export const EQUIPMENT = {
   polea:      'Polea',
   corporal:   'Peso corporal',
   kettlebell: 'Kettlebell',
+  cardio:     'Cardio',
 };
 
 export const EXERCISES = [
@@ -279,6 +280,10 @@ export const EXERCISES = [
     p: ['aductores'], s: [],
     steps: ['Siéntate con las almohadillas en la cara interna de las rodillas.', 'Junta las piernas.', 'Abre despacio.'],
     tips: 'Fortalecer los aductores ayuda a estabilizar la rodilla en las sentadillas.' },
+  { id: 'aductores-polea', name: 'Aductores en polea', eq: 'polea',
+    p: ['aductores'], s: [],
+    steps: ['Ponte la tobillera en la polea baja y colócate de lado, con la pierna de trabajo más cerca de la máquina.', 'Agárrate a la máquina y separa un poco esa pierna hacia la polea.', 'Lleva la pierna hacia dentro, cruzando por delante de la otra.', 'Vuelve despacio sin dejar que el peso tire de ti.'],
+    tips: 'Tronco quieto y recto: el movimiento sale solo de la cadera. Mejor poco peso y mucho control.' },
   { id: 'gemelos-pie', name: 'Elevación de talones de pie', eq: 'maquina',
     p: ['gemelos'], s: [],
     steps: ['Apoya la punta de los pies en un escalón con los talones fuera.', 'Sube de puntillas lo más alto posible.', 'Baja hasta notar estiramiento.'],
@@ -305,7 +310,40 @@ export const EXERCISES = [
     p: ['gluteos'], s: [],
     steps: ['Siéntate con las almohadillas en la cara externa de las rodillas.', 'Abre las piernas.', 'Cierra despacio.'],
     tips: 'Trabaja el glúteo medio. Inclinarte un poco hacia delante lo activa más.' },
+
+  // ---------- Cardio (se apuntan en minutos, sin peso ni repeticiones) ----------
+  { id: 'cinta', name: 'Correr en cinta', eq: 'cardio', cardio: true,
+    p: [], s: ['cuadriceps', 'isquios', 'gemelos', 'gluteos'],
+    steps: ['Empieza caminando 2–3 minutos para calentar.', 'Sube la velocidad hasta un ritmo en el que puedas hablar con frases cortas.', 'Termina con 2–3 minutos andando para bajar pulsaciones.'],
+    tips: 'No te agarres a las barras: pisa debajo de la cadera y mantén el tronco erguido.' },
+  { id: 'cinta-inclinada', name: 'Caminar en cinta inclinada', eq: 'cardio', cardio: true,
+    p: [], s: ['gluteos', 'gemelos', 'isquios'],
+    steps: ['Pon una inclinación del 8–12 % y una velocidad de 4,5–6 km/h.', 'Camina con pasos firmes sin sujetarte.', 'Mantén un ritmo constante todo el tiempo.'],
+    tips: 'Gran opción de cardio suave que cuida las rodillas y trabaja mucho el glúteo.' },
+  { id: 'eliptica', name: 'Elíptica', eq: 'cardio', cardio: true,
+    p: [], s: ['cuadriceps', 'gluteos', 'gemelos'],
+    steps: ['Sube con los pies centrados en los pedales.', 'Empuja y tira de los brazos acompañando el movimiento.', 'Ajusta la resistencia para mantener un ritmo cómodo pero exigente.'],
+    tips: 'Sin impacto: buena alternativa a correr si te molestan las rodillas.' },
+  { id: 'bici-estatica', name: 'Bicicleta estática', eq: 'cardio', cardio: true,
+    p: [], s: ['cuadriceps', 'gluteos', 'gemelos'],
+    steps: ['Ajusta el sillín a la altura de la cadera.', 'Pedalea con la rodilla casi estirada abajo.', 'Sube la resistencia para hacer intervalos si quieres más intensidad.'],
+    tips: 'Para quemar grasa vale tanto un ritmo suave largo como intervalos cortos e intensos.' },
+  { id: 'remo-ergometro', name: 'Remo (máquina)', eq: 'cardio', cardio: true,
+    p: [], s: ['dorsal', 'espalda-media', 'cuadriceps', 'gluteos'],
+    steps: ['Empuja primero con las piernas.', 'Después inclina un poco el tronco hacia atrás y tira del agarre hacia el ombligo.', 'Vuelve en orden inverso: brazos, tronco y piernas.'],
+    tips: 'La fuerza sale sobre todo de las piernas, no de los brazos.' },
+  { id: 'escaladora', name: 'Escaladora', eq: 'cardio', cardio: true,
+    p: [], s: ['gluteos', 'cuadriceps', 'gemelos'],
+    steps: ['Sube con la espalda recta y las manos apoyadas suavemente.', 'Pisa con todo el pie en cada escalón.', 'Mantén un ritmo que puedas sostener.'],
+    tips: 'Muy exigente: empieza con pocos minutos y a ritmo bajo.' },
+  { id: 'comba', name: 'Saltar a la comba', eq: 'cardio', cardio: true,
+    p: [], s: ['gemelos', 'cuadriceps', 'deltoide-lat'],
+    steps: ['Gira la cuerda con las muñecas, no con los brazos.', 'Salta poco, solo lo justo para que pase la cuerda.', 'Alterna series de 30–60 s con descansos cortos.'],
+    tips: 'Aterriza con la punta del pie y las rodillas un poco flexionadas.' },
 ];
+
+// ¿El ejercicio es de cardio? (se apunta en minutos)
+export const isCardio = id => !!EX[id]?.cardio;
 
 export const EX = Object.fromEntries(EXERCISES.map(e => [e.id, e]));
 
@@ -320,5 +358,6 @@ export const TEMPLATES = [
   { name: 'Full body', emoji: '⚡', items: [['sentadilla-goblet', 3, '10'], ['press-mancuernas', 3, '10'], ['remo-mancuerna', 3, '10'], ['press-hombro-mancuernas', 3, '10'], ['plancha', 3, '30 s']] },
   { name: 'Torso', emoji: '🏋️', items: [['press-banca', 4, '6-8'], ['remo-barra', 4, '8-10'], ['press-militar', 3, '8-10'], ['jalon-pecho', 3, '10-12'], ['aperturas', 3, '12'], ['elevaciones-laterales', 3, '12-15']] },
   { name: 'Brazos (bíceps y tríceps)', emoji: '💥', items: [['curl-barra', 4, '8-10'], ['press-frances', 4, '8-10'], ['curl-martillo', 3, '10-12'], ['extension-polea', 3, '10-12'], ['curl-concentrado', 3, '12'], ['extension-overhead', 3, '12']] },
+  { name: 'Cardio', emoji: '🏃', items: [['cinta', 1, '20'], ['eliptica', 1, '15'], ['bici-estatica', 1, '15']] },
   { name: 'Glúteo y femoral', emoji: '🍑', items: [['hip-thrust', 4, '8-10'], ['peso-muerto-rumano', 4, '8-10'], ['bulgara', 3, '10'], ['curl-femoral', 3, '12'], ['patada-gluteo', 3, '15'], ['abduccion', 3, '15']] },
 ];

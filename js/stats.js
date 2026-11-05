@@ -134,8 +134,8 @@ export function renderStats() {
     <div class="kpis">
       <div class="card kpi-center"><div class="kpi-label">Asistencia</div><div class="kpi-value kpi-big">${attendance}%</div></div>
       <div class="card"><div class="kpi-label">Tiempo total</div><div class="kpi-value">${minutes >= 60 ? (minutes / 60).toFixed(1).replace('.', ',') : minutes}<small>${minutes >= 60 ? 'h' : 'min'}</small></div><div class="kpi-sub">${trained.length ? `${Math.round(minutes / trained.length) || 0} min de media` : 'sin datos'}</div></div>
-      <div class="card"><div class="kpi-label">Racha actual</div><div class="kpi-value">${current}<small>sem</small></div><div class="kpi-sub">cumpliendo ${target} días/sem</div></div>
-      <div class="card"><div class="kpi-label">Mejor racha</div><div class="kpi-value">${best}<small>sem 🏆</small></div></div>
+      <div class="card kpi-center"><div class="kpi-label">Racha actual</div><div class="kpi-value kpi-big">${current}<small>${current === 1 ? 'semana' : 'semanas'}</small></div></div>
+      <div class="card kpi-center"><div class="kpi-label">Mejor racha</div><div class="kpi-value kpi-big">${best}<small>${best === 1 ? 'semana' : 'semanas'} 🏆</small></div></div>
     </div>
 
     <div class="card">
@@ -223,7 +223,7 @@ async function renderStepsCard(el, s, e) {
 // Evolución del peso en cada ejercicio (entrenos hechos en modo entrenar)
 function progressCard() {
   const recent = [...state.sessions].sort((a, b) => b.startedAt - a.startedAt);
-  const done = [...new Set(recent.flatMap(s => s.items.map(i => i.ex)))].filter(id => EX[id]);
+  const done = [...new Set(recent.flatMap(s => s.items.map(i => i.ex)))].filter(id => EX[id] && !EX[id].cardio);
   if (!done.length) {
     return `<div class="card"><div class="card-head"><h3>Progreso por ejercicio</h3></div>
       <div class="empty"><span class="e">📈</span><b>Aún no hay entrenos registrados</b></div></div>`;

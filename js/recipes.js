@@ -63,7 +63,7 @@ const RAW = [
 const byName = new Map(FOODS.map(f => [f.name, f]));
 
 // Alimento listo para la comida, con valores escalados. Si va por unidades guarda la ración (unitG/unitLabel)
-function ingredientItem([name, qty, mode]) {
+export function ingredientItem([name, qty, mode]) {
   const f = byName.get(name);
   if (!f) throw new Error(`Ingrediente desconocido en recipes.js: ${name}`);
   const [label, ug] = f.portions[0] || ['ración', 100];

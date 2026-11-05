@@ -5,13 +5,16 @@ import { db } from './db.js';
 import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet } from './sheet.js';
 import { bodyMap, setMapSelection, PARTS, partColor } from './bodymap.js';
-import { EXERCISES, EX, EQUIPMENT, TEMPLATES, videoUrl } from './exercises.js';
+import { EXERCISES, EX, EQUIPMENT, TEMPLATES, videoUrl, isCardio } from './exercises.js';
 import { startWorkout, openWorkout, getActive, progressBlock } from './workout.js';
 import { GEN_GROUPS, PRESETS, generateRoutine, swapExercise, estimateMinutes, routineName } from './generator.js';
 import { state, MUSCLES, M, esc, toast, haptic } from './utils.js';
 import { mountAnim, hasAnim } from './anim.js';
 
-const EQ_EMOJI = { barra: '🏋️', mancuernas: '💪', maquina: '⚙️', polea: '🔗', corporal: '🤸', kettlebell: '🔔' };
+const EQ_EMOJI = { barra: '🏋️', mancuernas: '💪', maquina: '⚙️', polea: '🔗', corporal: '🤸', kettlebell: '🔔', cardio: '🏃' };
+// Color y músculos de un ejercicio (el cardio no tiene músculo principal)
+const exColor = e => (e?.cardio ? M.cardio.color : partColor(e?.p[0]));
+const exMuscles = e => (e?.cardio ? 'Cardio' : (e?.p || []).map(p => PARTS[p].name).join(', '));
 
 let root;
 let tab = 'routines';                           // 'routines' | 'library'
@@ -55,31 +58,57 @@ export function renderRoutines() {
     </div>
     <div id="rt-body"></div>`;
   const body = root.querySelector('#rt-body');
-  if (tab === 'routines') body.innerHTML = routinesHtml();
+  if (tab === 'routines') { body.innerHTML = routinesHtml(); setupRoutineScroller(body.querySelector('#rt-scroll.on')); }
   else mountLibrary(body, libFilter, openExercise);
 }
 
 // Grupos musculares (del calendario) que trabaja una rutina, según los músculos principales
 export function routineGroups(r) {
   const used = new Set((r?.items || []).flatMap(i => EX[i.ex]?.p || []).map(p => PARTS[p].group));
+  if ((r?.items || []).some(i => isCardio(i.ex))) used.add('cardio');
   return MUSCLES.map(m => m.id).filter(id => used.has(id));
 }
 
+// Pastillas de color con los grupos que trabaja una rutina o un entreno (como la leyenda del calendario)
+export function groupPills(r) {
+  const groups = routineGroups(r);
+  return groups.length ? `<div class="grp-pills">${groups.map(g => `<span style="--c:${M[g].color}"><i></i>${M[g].name}</span>`).join('')}</div>` : '';
+}
+
 // ---------- Mis rutinas ----------
+// Con más de dos rutinas: se ven dos y el resto se desliza; las tarjetas que entran o salen se encogen y difuminan
+function setupRoutineScroller(box) {
+  if (!box) return;
+  const cards = [...box.children];
+  const fit = () => {
+    const a = cards[0].getBoundingClientRect(), b = cards[1].getBoundingClientRect();
+    box.style.maxHeight = `${Math.ceil(b.bottom - a.top)}px`;
+  };
+  const paint = () => {
+    const r = box.getBoundingClientRect();
+    for (const c of cards) {
+      const cr = c.getBoundingClientRect();
+      const vis = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top)) / (cr.height || 1);
+      c.style.transform = `scale(${(0.88 + 0.12 * vis).toFixed(3)})`;
+      c.style.opacity = (0.25 + 0.75 * vis).toFixed(3);
+    }
+  };
+  let raf = 0;
+  box.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(paint); }, { passive: true });
+  requestAnimationFrame(() => { fit(); paint(); });
+}
 function routinesHtml() {
   const list = [...state.routines].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const cards = list.map(r => {
     const groups = routineGroups(r);
     return `<div class="card routine" data-routine="${r.id}" role="button" tabindex="0">
-      <div class="routine-top"><b>${esc(r.name)}</b>${chev('r')}</div>
-      <div class="muted small">${r.items.length} ${r.items.length === 1 ? 'ejercicio' : 'ejercicios'}${groups.length ? ` · ${groups.map(g => M[g].name).join(' · ')}` : ''}</div>
-      <div class="today-dots">${groups.map(g => `<i style="--c:${M[g].color}"></i>`).join('')}</div>
+      <div class="routine-top"><b>${esc(r.name)}</b><span class="rt-dots">${groups.map(g => `<i style="--c:${M[g].color}" title="${M[g].name}"></i>`).join('')}</span>${chev('r')}</div>
       ${r.items.length ? `<button class="btn small primary start" data-start="${r.id}">▶ Empezar entreno</button>` : ''}
     </div>`;
   }).join('');
 
   return `
-    ${cards || `<div class="card empty"><span class="e">📋</span><b>Aún no tienes rutinas</b>Crea una desde cero o empieza con una plantilla.</div>`}
+    ${cards ? `<div class="rt-scroll ${list.length > 2 ? 'on' : ''}" id="rt-scroll">${cards}</div>` : `<div class="card empty"><span class="e">📋</span><b>Aún no tienes rutinas</b>Crea una desde cero o empieza con una plantilla.</div>`}
     <button class="btn primary" id="gen-routine">✨ Crear rutina automática</button>
     <button class="btn primary" id="new-routine">+ Nueva rutina</button>
     <button class="btn tint" id="free-workout">⚡ Entrenamiento libre</button>
@@ -106,8 +135,8 @@ function filterExercises(f) {
 function exRow(e, f, pick) {
   const tag = f.muscle ? (e.p.includes(f.muscle) ? '<span class="zone-tag p">Principal</span>' : '<span class="zone-tag s">Secundario</span>') : '';
   return `<button class="ex-row" data-ex="${e.id}">
-    <span class="ex-ico" style="--c:${partColor(e.p[0])}">${EQ_EMOJI[e.eq] || '🏋️'}</span>
-    <span class="info"><b>${esc(e.name)}</b><small>${EQUIPMENT[e.eq]} · ${e.p.map(p => PARTS[p].name).join(', ')}</small></span>
+    <span class="ex-ico" style="--c:${exColor(e)}">${EQ_EMOJI[e.eq] || '🏋️'}</span>
+    <span class="info"><b>${esc(e.name)}</b><small>${e.cardio ? 'Cardio · en minutos' : `${EQUIPMENT[e.eq]} · ${exMuscles(e)}`}</small></span>
     ${tag}
     ${pick ? '<span class="ex-add">+</span>' : chev('r')}
   </button>`;
@@ -119,7 +148,7 @@ export function mountLibrary(el, f, onPick, pick = false) {
       ${bodyMap({ interactive: true, selected: f.muscle })}
       <div class="bm-hint" id="bm-hint"></div>
     </div>
-    <input class="search" type="search" placeholder="Buscar ejercicio" autocomplete="off" value="${esc(f.q)}">
+    <input class="search" type="search" aria-label="Buscar ejercicio" autocomplete="off" value="${esc(f.q)}">
     <div class="chips scroll">
       <button class="chip ${!f.eq ? 'on' : ''}" data-eq="" style="--c:var(--accent)">Todo</button>
       ${Object.entries(EQUIPMENT).map(([id, name]) => `<button class="chip ${f.eq === id ? 'on' : ''}" data-eq="${id}" style="--c:var(--accent)">${EQ_EMOJI[id]} ${name}</button>`).join('')}
@@ -136,10 +165,14 @@ export function mountLibrary(el, f, onPick, pick = false) {
     if (f.muscle || f.q.trim()) {
       html = list.map(e => exRow(e, f, pick)).join('');
     } else {
-      // Sin músculo elegido: agrupados por grupo muscular
+      // Sin músculo elegido: un botón por grupo muscular que despliega sus ejercicios
       html = MUSCLES.map(g => {
-        const items = list.filter(e => PARTS[e.p[0]].group === g.id);
-        return items.length ? `<div class="ex-group-head" style="--c:${g.color}"><i></i>${g.name}</div>${items.map(e => exRow(e, f, pick)).join('')}` : '';
+        const items = list.filter(e => (e.cardio ? 'cardio' : PARTS[e.p[0]].group) === g.id);
+        if (!items.length) return '';
+        const open = f.grp === g.id;
+        return `<button class="ex-grp ${open ? 'open' : ''}" data-grp="${g.id}" style="--c:${g.color}">
+            <i></i><b>${g.name}</b><span>${items.length}</span>${chev('r')}
+          </button>${open ? `<div class="ex-grp-list">${items.map(e => exRow(e, f, pick)).join('')}</div>` : ''}`;
       }).join('');
     }
     el.querySelector('#ex-list').innerHTML = html || '<div class="card empty"><span class="e">🔍</span><b>Sin resultados</b>Prueba con otro músculo o material.</div>';
@@ -154,6 +187,8 @@ export function mountLibrary(el, f, onPick, pick = false) {
       return draw();
     }
     if (e.target.closest('[data-clear]')) { f.muscle = null; setMapSelection(el, null); return draw(); }
+    const grp = e.target.closest('[data-grp]');
+    if (grp) { f.grp = f.grp === grp.dataset.grp ? null : grp.dataset.grp; haptic(); return draw(); }
     const eq = e.target.closest('[data-eq]');
     if (eq) {
       f.eq = eq.dataset.eq || null;
@@ -183,19 +218,19 @@ export function showExercise(id, back = null) {
     ${back ? `<button class="link back" id="ex-back">${chev('l')} Volver</button>` : ''}
     <h2 class="sheet-title">${esc(ex.name)}</h2>
     <div class="muted small">${EQ_EMOJI[ex.eq]} ${EQUIPMENT[ex.eq]}</div>
-    <div class="card" style="margin-top:14px">
+    ${ex.cardio ? '' : `<div class="card" style="margin-top:14px">
       ${bodyMap({ primary: ex.p, secondary: ex.s, small: true })}
       <div class="zones">
         <div><span class="zone-tag p">Principal</span>${zoneList(ex.p)}</div>
         ${ex.s.length ? `<div><span class="zone-tag s">Secundario</span>${zoneList(ex.s)}</div>` : ''}
       </div>
-    </div>
+    </div>`}
     ${prog ? `<div class="label">Tu progreso</div><div class="card">${prog}</div>` : ''}
     <div class="label">Cómo se hace</div>
-    <div class="card"><ol class="steps">${ex.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol></div>
-    ${ex.tips ? `<div class="notice">💡 ${esc(ex.tips)}</div>` : ''}
+    <div class="card how"><ol class="steps">${ex.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol></div>
+    ${ex.tips ? `<div class="tip-card"><span class="e">💡</span><div><b>Consejo</b><p>${esc(ex.tips)}</p></div></div>` : ''}
     ${hasAnim(id) ? '<div class="card ex-anim" id="ex-anim"></div>' : ''}
-    <a class="link" href="${videoUrl(ex)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:12px">¿Más dudas? Ver vídeos en YouTube</a>
+    ${ex.cardio ? '' : `<a class="link" href="${videoUrl(ex)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:12px">¿Más dudas? Ver vídeos en YouTube</a>`}
     ${back ? '' : '<button class="btn primary" id="add-to" style="margin-top:14px">Añadir a una rutina</button>'}`, body => {
     const anim = body.querySelector('#ex-anim');
     if (anim) mountAnim(anim, id);
@@ -215,7 +250,7 @@ function chooseRoutine(exId) {
     body.addEventListener('click', async e => {
       const to = e.target.closest('[data-to]')?.dataset.to;
       if (!to) return;
-      const item = { ex: exId, sets: 3, reps: '10', kg: '' };
+      const item = isCardio(exId) ? { ex: exId, sets: 1, reps: '20', kg: '' } : { ex: exId, sets: 3, reps: '10', kg: '' };
       if (to === 'new') return openEditor({ name: '', items: [item] });
       const r = state.routines.find(x => x.id === Number(to));
       await saveRoutine({ ...r, items: [...r.items, item] });
@@ -242,17 +277,19 @@ function openEditor(existing) {
     const ex = EX[it.ex];
     return `<div class="card item rt-item">
       <div class="item-top">
-        <span class="rt-num" style="--c:${partColor(ex?.p[0])}">${i + 1}</span>
-        <div class="rt-name"><b class="ex-link" data-info="${it.ex}">${esc(ex?.name || it.ex)}</b><small>${ex ? ex.p.map(p => PARTS[p].name).join(', ') : ''}</small></div>
+        <span class="rt-num" style="--c:${exColor(ex)}">${i + 1}</span>
+        <div class="rt-name"><b class="ex-link" data-info="${it.ex}">${esc(ex?.name || it.ex)}</b><small>${exMuscles(ex)}</small></div>
         <button class="icon-btn" data-mv="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">${arrow('M12 19V5M5 12l7-7 7 7')}</button>
         <button class="icon-btn" data-mv="${i}" data-d="1" ${i === draft.items.length - 1 ? 'disabled' : ''} aria-label="Bajar">${arrow('M12 5v14M5 12l7 7 7-7')}</button>
         <button class="icon-btn" data-rm="${i}" aria-label="Quitar">${arrow('M6 6l12 12M18 6L6 18')}</button>
       </div>
-      <div class="item-grid rt-grid">
+      ${ex?.cardio ? `<div class="item-grid rt-grid one">
+        <label>Minutos<input data-i="${i}" data-f="reps" inputmode="numeric" value="${esc(it.reps)}"></label>
+      </div>` : `<div class="item-grid rt-grid">
         <label>Series<input data-i="${i}" data-f="sets" inputmode="numeric" value="${esc(it.sets)}"></label>
         <label>Reps<input data-i="${i}" data-f="reps" value="${esc(it.reps)}"></label>
         <label>Kg<input data-i="${i}" data-f="kg" inputmode="decimal" placeholder="–" value="${esc(it.kg)}"></label>
-      </div>
+      </div>`}
     </div>`;
   }).join('') : '<div class="muted small" style="margin:0 2px 12px">Añade ejercicios eligiendo músculos en el mapa.</div>';
 
@@ -261,6 +298,7 @@ function openEditor(existing) {
     <label class="field"><span>Nombre</span>
       <input id="rt-name" placeholder="Ej: Pecho y tríceps" value="${esc(draft.name)}">
     </label>
+    <div id="rt-groups">${groupPills(draft)}</div>
     <div class="label">Ejercicios</div>
     <div id="rt-items">${itemsHtml()}</div>
     <button class="btn secondary" id="add-ex">+ Añadir ejercicio</button>
@@ -270,7 +308,10 @@ function openEditor(existing) {
     </div>`;
 
   const mountEditor = body => {
-    const redrawItems = () => { body.querySelector('#rt-items').innerHTML = itemsHtml(); };
+    const redrawItems = () => {
+      body.querySelector('#rt-items').innerHTML = itemsHtml();
+      body.querySelector('#rt-groups').innerHTML = groupPills(draft);
+    };
     body.querySelector('#rt-name').addEventListener('input', e => { draft.name = e.target.value; });
     body.addEventListener('input', e => {
       const i = e.target.dataset.i;
@@ -353,7 +394,7 @@ function openGenerator() {
 
     <div class="label">Material disponible</div>
     <div class="chips">
-      ${Object.entries(EQUIPMENT).map(([id, name]) => `<button class="chip ${opts.eqs.has(id) ? 'on' : ''}" data-geq="${id}" style="--c:var(--blue)">${EQ_EMOJI[id]} ${name}</button>`).join('')}
+      ${Object.entries(EQUIPMENT).filter(([id]) => id !== 'cardio').map(([id, name]) => `<button class="chip ${opts.eqs.has(id) ? 'on' : ''}" data-geq="${id}" style="--c:var(--blue)">${EQ_EMOJI[id]} ${name}</button>`).join('')}
     </div>
 
     <button class="btn primary" id="gen-go" style="margin-top:22px">Crear rutina</button>`;

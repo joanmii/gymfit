@@ -2,10 +2,11 @@
 // Pestaña Nutrición: resumen del día, comidas y análisis por foto
 // =========================================================
 import { db } from './db.js';
-import { analyzeFood, analyzeText } from './api.js';
+import { analyzeFood, analyzeText, createRecipe } from './api.js';
 import { openScanner, searchProducts } from './barcode.js';
 import { FOOD_CATS, searchFoods, foodsByCat, norm } from './foods.js';
 import { searchRecipes } from './recipes.js';
+import { COOKBOOK } from './cookbook.js';
 import { renderWeight, openWeighIn } from './weight.js';
 import { ring, bars } from './charts.js';
 import { chev } from './calendar.js';
@@ -61,8 +62,8 @@ let root;
 let day = today();
 let trend = 7; // 7 | 30 días
 const MODE_KEY = 'gymfit-nut-mode';
-let mode = 'comidas'; // 'comidas' | 'peso'
-try { mode = localStorage.getItem(MODE_KEY) === 'peso' ? 'peso' : 'comidas'; } catch { /* nada */ }
+let mode = 'comidas'; // 'comidas' | 'recetas' | 'peso'
+try { const m = localStorage.getItem(MODE_KEY); mode = ['peso', 'recetas'].includes(m) ? m : 'comidas'; } catch { /* nada */ }
 
 export function initNutrition(el) {
   root = el;
@@ -79,6 +80,11 @@ export function initNutrition(el) {
     const tr = e.target.closest('[data-trend]');
     if (tr) { trend = Number(tr.dataset.trend); return renderNutrition(); }
     if (e.target.closest('[data-steps]')) return openSteps();
+    if (e.target.closest('[data-rai]')) return openRecipeAI();
+    const rm = e.target.closest('[data-rmine]');
+    if (rm) return openRecipe(savedRecipes.find(r => r.id === Number(rm.dataset.rmine)));
+    const rd = e.target.closest('[data-rdef]');
+    if (rd) return openRecipe(COOKBOOK.find(r => r.key === rd.dataset.rdef));
     const meal = e.target.closest('[data-meal]');
     if (meal) {
       const all = await db.mealsByDate(keyOf(day));
@@ -87,7 +93,7 @@ export function initNutrition(el) {
     }
   });
 
-  document.getElementById('fab').addEventListener('click', () => mode === 'peso' ? openWeighIn() : openAddMenu());
+  document.getElementById('fab').addEventListener('click', () => (mode === 'peso' ? openWeighIn() : mode === 'recetas' ? openRecipeAI() : openAddMenu()));
   for (const id of ['cam-input', 'gal-input']) {
     document.getElementById(id).addEventListener('change', async e => {
       const file = e.target.files?.[0];
@@ -99,7 +105,11 @@ export function initNutrition(el) {
 
 // ---------- Vista principal ----------
 export async function renderNutrition() {
-  document.getElementById('fab').setAttribute('aria-label', mode === 'peso' ? 'Apuntar peso' : 'Añadir comida');
+  document.getElementById('fab').setAttribute('aria-label', mode === 'peso' ? 'Apuntar peso' : mode === 'recetas' ? 'Crear receta' : 'Añadir comida');
+  if (mode === 'recetas') {
+    root.innerHTML = `<h1 class="title">Nutrición</h1>${modeSeg()}<div id="recipes"></div>`;
+    return renderRecipes(root.querySelector('#recipes'));
+  }
   if (mode === 'peso') {
     root.innerHTML = `<h1 class="title">Nutrición</h1>${modeSeg()}<div id="weight"></div>`;
     return renderWeight(root.querySelector('#weight'));
@@ -173,7 +183,7 @@ export async function renderNutrition() {
         </div>
       </div>
       ${burned ? `<div class="act-note">Comido <b>${r0(tot.kcal)}</b> − actividad <b>${r0(burned)}</b> = <b>${r0(tot.kcal - burned)}</b> kcal netas</div>` : ''}
-      ${basalKcal() ? `<div class="act-note muted small">Gasto del día ≈ <b>${r0(basalKcal() + burned).toLocaleString('es-ES')}</b> kcal (basal ${r0(basalKcal()).toLocaleString('es-ES')} + actividad ${r0(burned)})</div>` : ''}
+      ${basalKcal() ? `<div class="act-note muted small">Gasto del día ≈ <b>${r0(basalKcal() * dayFraction(day) + burned).toLocaleString('es-ES')}</b> kcal</div>` : ''}
       ${hasBodyWeight() ? '' : `<div class="act-note muted">Calculado con ${bodyKg()} kg: apunta tu peso en ⚖️ Peso para afinar.</div>`}
     </div>
 
@@ -211,8 +221,17 @@ export async function renderNutrition() {
 const modeSeg = () => `
   <div class="seg wide">
     <button data-nmode="comidas" class="${mode === 'comidas' ? 'on' : ''}">🍽️ Comidas</button>
+    <button data-nmode="recetas" class="${mode === 'recetas' ? 'on' : ''}">📖 Recetas</button>
     <button data-nmode="peso" class="${mode === 'peso' ? 'on' : ''}">⚖️ Peso</button>
   </div>`;
+
+// Parte del día ya transcurrida (el metabolismo basal se gasta poco a poco): hoy según la hora, días pasados enteros
+function dayFraction(d) {
+  const t = today();
+  if (+d < +t) return 1;
+  if (+d > +t) return 0;
+  return Math.min(1, (Date.now() - +t) / 86400000);
+}
 
 // Verde: ±200 kcal del objetivo · Amarillo: entre 200 y 500 · Rojo: más de 500 por arriba o por abajo
 function kcalColor(kcal, goal) {
@@ -283,9 +302,9 @@ function scoreCard(s) {
     ${s.per100 ? `<div class="per100"><span>Por 100 g</span>
       <b>${r0(s.per100.kcal)} kcal</b><b class="p-c">P ${r1(s.per100.protein)}</b><b class="c-c">H ${r1(s.per100.carbs)}</b><b class="f-c">G ${r1(s.per100.fat)}</b></div>` : ''}
     <div class="score-why">
-      <span>Proteína: <b>${pct(s.pShare)}</b> de las kcal</span>
+      <span>Proteína: <b>${pct(s.pShare)}</b></span>
       ${s.density !== null ? `<span>Densidad: <b>${r1(s.density).toLocaleString('es-ES')}</b> kcal/g</span>` : ''}
-      <span>Grasa: <b>${pct(s.fShare)}</b> de las kcal</span>
+      <span>Grasa: <b>${pct(s.fShare)}</b></span>
     </div>`;
 }
 
@@ -372,7 +391,7 @@ function openAddMenu(inPlace = false) {
       ${tile('gal', '🖼️', 'Galería', 'Foto que ya tengas', 'var(--orange)')}
     </div>
     <button class="action" data-a="man" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">✍️</span><b>Introducir a mano</b></button>
-    <button class="action" data-a="list" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">📋</span><b>Lista de alimentos</b></button>
+    <button class="action" data-a="list" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">🍽️</span><b>Alimentos</b></button>
     <div id="favs"></div>
     <div id="recent"></div>`, body => {
     body.addEventListener('click', e => {
@@ -650,7 +669,7 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
   const conf = { low: 'Confianza baja · revisa las cantidades', medium: 'Confianza media', high: 'Confianza alta' };
 
   const render = () => `
-    ${dish ? `<button class="link back" id="dish-back">${chev('l')} Lista de alimentos</button>` : ''}
+    ${dish ? `<button class="link back" id="dish-back">${chev('l')} Alimentos</button>` : ''}
     <div class="sheet-title-row">
       <h2 class="sheet-title">${dish ? (editing ? 'Editar plato' : 'Crear plato') : editing ? 'Editar comida' : 'Revisa y guarda'}</h2>
       <button class="icon-btn star" id="fav" aria-label="Guardar plato en favoritos" ${dish ? 'hidden' : ''}>☆</button>
@@ -859,7 +878,7 @@ function openReview(draft, editing = false, fresh = false, inPlace = false) {
       let list = [], qv = '', all = false, editing = -1;
       const box = freshBox(dishPanel);
       box.innerHTML = `
-        <input class="search" type="search" enterkeyhint="search" autocomplete="off" placeholder="Busca cualquier plato: tortilla, arroz con pollo…">
+        <input class="search" type="search" enterkeyhint="search" autocomplete="off" aria-label="Buscar">
         <div data-dl></div>`;
       const dishRow = (r, i) => `
         <button class="food-row" data-dish="${i}">
@@ -1068,11 +1087,19 @@ const catChips = cur => FOOD_CATS_ALL.map(c => `<button class="chip ${c.id === c
 // Alimentos de una categoría, o de una búsqueda (con tus favoritos primero)
 function listFoods(cat, query, limit) {
   const q = query.trim();
-  if (!q) return cat === 'fav' ? foodFavCache : foodsByCat(cat);
+  if (!q) return cat === 'fav' ? foodFavCache : [...myFoodsCache.filter(f => f.cat === cat), ...foodsByCat(cat)];
   const words = norm(q).split(/\s+/).filter(Boolean);
-  const favs = foodFavCache.filter(f => words.every(w => norm(f.name).includes(w)));
-  const seen = new Set(favs.map(f => favKey(f.name)));
-  return [...favs, ...searchFoods(q, limit).filter(f => !seen.has(favKey(f.name)))];
+  const match = f => words.every(w => norm(f.name).includes(w));
+  const first = [...foodFavCache.filter(match), ...myFoodsCache.filter(match)];
+  const seen = new Set();
+  return [...first, ...searchFoods(q, limit)].filter(f => { const k = favKey(f.name); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+// ---------- Alimentos añadidos por ti (con su categoría) ----------
+let myFoodsCache = [];
+async function loadMyFoods() {
+  myFoodsCache = (await db.allMyFoods()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  return myFoodsCache;
 }
 const FAV_EMPTY = '<div class="hint-card">Aún no tienes favoritos. Pulsa <b>☆</b> en cualquier alimento (o escanea un envase) para tenerlo aquí.</div>';
 
@@ -1090,8 +1117,8 @@ const starSpan = f => {
 };
 const foodRow = (f, attr, browse = false) => `
   <button class="food-row" ${attr}>
-    ${f.image ? `<img src="${esc(f.image)}" alt="" loading="lazy">` : `<span class="e">${f.emoji || '🍽️'}</span>`}
-    <span class="n">${esc(f.name)}<small>${esc(portionText(f))}</small></span>
+    ${foodThumb(f)}
+    <span class="n">${esc(f.name)}</span>
     ${starSpan(f)}
     ${browse ? '' : '<span class="plus">+</span>'}
   </button>`;
@@ -1120,12 +1147,12 @@ function mountFoodPicker(el, ctx) {
   const row = (f, attr) => foodRow(f, attr, browse);
 
   box.innerHTML = `
-    <input class="search" id="pk-q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Busca: huevo, jamón, queso, café…" value="${esc(st.q)}">
+    <input class="search" id="pk-q" type="search" enterkeyhint="search" autocomplete="off" aria-label="Buscar" value="${esc(st.q)}">
     <div class="pick-actions" ${browse ? 'style="grid-template-columns:1fr"' : ''}>
       <button class="action" data-pk="scan" style="--c:color-mix(in srgb,var(--blue) 30%,transparent)"><span class="e">🏷️</span><div>Escanear<small>${browse ? 'Guarda un envasado en favoritos' : 'Código de barras'}</small></div></button>
       ${browse ? '' : `<button class="action" data-pk="manual" style="--c:color-mix(in srgb,var(--muted) 22%,transparent)"><span class="e">✍️</span><div>En blanco<small>Pon tú los datos</small></div></button>`}
     </div>
-    <div class="label" data-pk-label>📋 Lista de alimentos</div>
+    <div class="label" data-pk-label>🍽️ Alimentos</div>
     <div class="chips scroll" data-pk-cats>${catChips(st.cat)}</div>
     <div class="food-list" data-pk-res></div>
     <div data-pk-online></div>`;
@@ -1169,7 +1196,7 @@ function mountFoodPicker(el, ctx) {
     paintOnline('idle');
   };
   paint();
-  loadFoodFavs().then(() => { if (box.isConnected) paint(); });
+  Promise.all([loadFoodFavs(), loadMyFoods()]).then(() => { if (box.isConnected) paint(); });
 
   let t;
   q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { st.q = q.value; paint(); }, 120); });
@@ -1224,8 +1251,8 @@ const scaleFood = (f, g) => { const k = g / 100, p = f.per100; return { name: f.
 const sumItems = items => items.reduce((a, i) => ({ kcal: a.kcal + (+i.kcal || 0), protein: a.protein + (+i.protein || 0), carbs: a.carbs + (+i.carbs || 0), fat: a.fat + (+i.fat || 0) }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
 const infoRow = (f, attr, sub) => `
   <button class="food-row" ${attr}>
-    ${f.image || f.photo ? `<img src="${esc(f.image || f.photo)}" alt="" loading="lazy">` : `<span class="e">${f.emoji || TYPE(typesOf(f)?.[0]).emoji}</span>`}
-    <span class="n">${esc(f.name)}<small>${esc(sub)}</small></span>
+    ${f.items ? (f.photo ? `<img src="${esc(f.photo)}" alt="" loading="lazy">` : `<span class="e">${f.emoji || TYPE(typesOf(f)?.[0]).emoji}</span>`) : foodThumb(f)}
+    <span class="n">${esc(f.name)}${sub ? `<small>${esc(sub)}</small>` : ''}</span>
     ${chev('r')}
   </button>`;
 const dishSub = r => `${r.items.length} ${r.items.length === 1 ? 'ingrediente' : 'ingredientes'} · ${r0(sumItems(r.items).kcal)} kcal`;
@@ -1236,14 +1263,13 @@ function openFoodBrowser(tab) {
   let foods = [], mine = [], online = [], dishes = [];
   setSheetContent(`
     <button class="link back" data-back>${chev('l')} Volver</button>
-    <h2 class="sheet-title">Lista de alimentos</h2>
+    <h2 class="sheet-title">🍽️ Alimentos</h2>
     <div class="seg wide" style="margin:6px 0 12px">
       <button data-btab="foods" class="${st.tab === 'foods' ? 'on' : ''}">🥚 Alimentos</button>
       <button data-btab="dishes" class="${st.tab === 'dishes' ? 'on' : ''}">🍳 Platos</button>
     </div>
-    <button class="btn primary" data-newdish>＋ Crear plato</button>
-    <input class="search" id="bq" type="search" enterkeyhint="search" autocomplete="off" style="margin-top:12px"
-      placeholder="${st.tab === 'foods' ? 'Busca: huevo, jamón, queso, café…' : 'Busca: tortilla, arroz con pollo…'}" value="${esc(st.q)}">
+    ${st.tab === 'foods' ? '<button class="btn primary" data-newfood>＋ Añadir alimento</button>' : '<button class="btn primary" data-newdish>＋ Crear plato</button>'}
+    <input class="search" id="bq" type="search" enterkeyhint="search" autocomplete="off" style="margin-top:12px" aria-label="Buscar" value="${esc(st.q)}">
     <div data-blist></div>`, body => {
     const listEl = body.querySelector('[data-blist]');
 
@@ -1254,7 +1280,7 @@ function openFoodBrowser(tab) {
       listEl.innerHTML = `
         <div class="label">📋 ${query ? 'Resultados' : 'Alimentos'}</div>
         ${query ? '' : `<div class="chips scroll">${catChips(st.cat)}</div>`}
-        <div class="food-list">${foods.map((f, i) => infoRow(f, `data-fi="${i}"`, portionText(f))).join('')
+        <div class="food-list">${foods.map((f, i) => infoRow(f, `data-fi="${i}"`, '')).join('')
           || (!query && st.cat === 'fav' ? FAV_EMPTY : '<div class="muted small" style="text-align:center;margin:12px 0">No está en la lista.</div>')}</div>
         ${query.length >= 2 ? `<div data-web><button class="btn secondary" data-websearch style="margin-top:10px">🌐 Buscar «${esc(query)}» en internet</button></div>` : ''}`;
     };
@@ -1272,7 +1298,7 @@ function openFoodBrowser(tab) {
     };
     const paint = () => (st.tab === 'foods' ? paintFoods : paintDishes)();
     paint();
-    Promise.all([loadFoodFavs(), loadFavorites()]).then(() => { if (listEl.isConnected) paint(); });
+    Promise.all([loadFoodFavs(), loadFavorites(), loadMyFoods()]).then(() => { if (listEl.isConnected) paint(); });
 
     let tm;
     body.querySelector('#bq').addEventListener('input', e => { clearTimeout(tm); tm = setTimeout(() => { st.q = e.target.value; paint(); }, 120); });
@@ -1281,6 +1307,7 @@ function openFoodBrowser(tab) {
       const bt = e.target.closest('[data-btab]');
       if (bt) { st.tab = bt.dataset.btab; st.q = ''; haptic(); return openFoodBrowser(); }
       if (e.target.closest('[data-newdish]')) return openDishEditor({ name: '', items: [], types: [defaultType()] });
+      if (e.target.closest('[data-newfood]')) return openFoodEditor({ cat: st.cat === 'fav' ? 'lacteos' : st.cat });
       const c = e.target.closest('[data-cat]');
       if (c) { st.cat = c.dataset.cat; return paint(); }
       const pick = (attr, arr) => { const b = e.target.closest(`[${attr}]`); return b ? arr[Number(b.getAttribute(attr))] : null; };
@@ -1299,7 +1326,7 @@ function openFoodBrowser(tab) {
           online = (await searchProducts(query)).map(productToFood);
           if (!web.isConnected) return;
           web.innerHTML = online.length
-            ? `<div class="label">🌐 Productos de Open Food Facts</div><div class="food-list">${online.map((f, i) => infoRow(f, `data-on="${i}"`, portionText(f))).join('')}</div>`
+            ? `<div class="label">🌐 Productos de Open Food Facts</div><div class="food-list">${online.map((f, i) => infoRow(f, `data-on="${i}"`, '')).join('')}</div>`
             : `<div class="muted small" style="text-align:center;margin:12px 0">No hay productos en internet para «${esc(query)}».</div>`;
         } catch (err) {
           if (web.isConnected) web.innerHTML = `<div class="notice err">${esc(err.message)}</div>`;
@@ -1323,24 +1350,44 @@ function openFoodDetail(food) {
   const portions = [...(food.portions || [])];
   if (!portions.some(([, g]) => g === 100)) portions.push(['100 g', 100]);
   setSheetContent(`
-    <button class="link back" data-back>${chev('l')} Lista de alimentos</button>
+    <button class="link back" data-back>${chev('l')} Alimentos</button>
     <div class="food-hero">
-      ${food.image ? `<img src="${esc(food.image)}" alt="">` : `<span class="e">${food.emoji || '🍽️'}</span>`}
+      <button class="fh-emoji" data-emoji aria-label="Cambiar emoji">${foodThumb(food)}</button>
       <div><b>${esc(food.name)}</b><small>${r0(p.kcal)} kcal por 100 g</small></div>
     </div>
+    <div class="emoji-grid" data-egrid hidden>${FOOD_EMOJIS.map(em => `<button data-em="${em}">${em}</button>`).join('')}</div>
     <div class="label">Por 100 g</div>
     <div class="card">${macroRow(p)}</div>
     <div class="label">Raciones</div>
     <div class="card portion-list">${portions.map(([l, g]) => nutriRow(l === '100 g' ? '100 g' : `1 ${esc(l)}`, `${r0(g)} g`, scaleFood(food, g))).join('')}</div>
     <div class="label">Puntuación</div>
     <div class="card score-card">${scoreCard(mealScore({ items: [scaleFood(food, 100)] }))}</div>
-    <button class="btn secondary" data-ffav style="margin-top:18px"></button>`, body => {
+    <button class="btn secondary" data-ffav style="margin-top:18px"></button>
+    ${food.custom ? '<button class="btn secondary" data-fedit>✏️ Editar alimento</button><button class="btn ghost danger" data-fdel>Borrar alimento</button>' : ''}`, body => {
     const fb = body.querySelector('[data-ffav]');
     const paintFav = () => { fb.textContent = isFoodFav(food.name) ? '★ En favoritos · quitar' : '☆ Añadir a favoritos'; };
     paintFav();
     loadFoodFavs().then(() => { if (body.isConnected) paintFav(); });
     body.addEventListener('click', async e => {
       if (e.target.closest('[data-back]')) return openFoodBrowser();
+      if (e.target.closest('[data-emoji]')) { const g = body.querySelector('[data-egrid]'); g.hidden = !g.hidden; return haptic(); }
+      const em = e.target.closest('[data-em]');
+      if (em) {
+        state.settings.foodEmoji = { ...(state.settings.foodEmoji || {}), [food.name]: em.dataset.em };
+        saveSettings();
+        if (food.custom && food.id != null) { food.emoji = em.dataset.em; await db.putMyFood(food); await loadMyFoods(); }
+        body.querySelector('[data-emoji]').innerHTML = foodThumb(food);
+        body.querySelector('[data-egrid]').hidden = true;
+        return haptic();
+      }
+      if (e.target.closest('[data-fedit]')) return openFoodEditor(food);
+      if (e.target.closest('[data-fdel]')) {
+        if (!confirm(`¿Borrar «${food.name}» de tus alimentos?`)) return;
+        await db.deleteMyFood(food.id);
+        await loadMyFoods();
+        toast('Alimento borrado');
+        return openFoodBrowser('foods');
+      }
       if (e.target.closest('[data-ffav]')) {
         await toggleFoodFav(food);
         haptic();
@@ -1353,7 +1400,7 @@ function openFoodDetail(food) {
 function openDishDetail(r) {
   const own = r.id != null;
   setSheetContent(`
-    <button class="link back" data-back>${chev('l')} Lista de alimentos</button>
+    <button class="link back" data-back>${chev('l')} Alimentos</button>
     <div class="food-hero">
       ${r.photo ? `<img src="${r.photo}" alt="">` : `<span class="e">${r.emoji || TYPE(typesOf(r)?.[0]).emoji}</span>`}
       <div><b>${esc(r.name)}</b><small>${own ? 'Tu plato' : 'Plato casero · cantidades para 1 persona'}</small></div>
@@ -1397,6 +1444,61 @@ function openDishDetail(r) {
   });
 }
 
+// Añadir / editar un alimento propio: categoría, valores por 100 g y una ración opcional
+function openFoodEditor(food = {}) {
+  const editing = food.id != null;
+  let cat = food.cat || 'lacteos';
+  const p = food.per100 || {};
+  const [pl, pg] = food.portions?.[0] || ['', ''];
+  const num = (id, label, v, step = '0.1') => `<label>${label}<input id="${id}" type="number" inputmode="decimal" min="0" step="${step}" value="${v ?? ''}" placeholder="0"></label>`;
+  setSheetContent(`
+    <button class="link back" data-back>${chev('l')} Alimentos</button>
+    <h2 class="sheet-title">${editing ? 'Editar alimento' : 'Añadir alimento'}</h2>
+    <label class="field"><span>Nombre</span><input id="fname" value="${esc(food.name || '')}" placeholder="Ej: Queso fresco batido Hacendado"></label>
+    <div class="label">Categoría</div>
+    <div class="chips">${FOOD_CATS.map(c => `<button class="chip ${c.id === cat ? 'on' : ''}" data-fcat="${c.id}" style="--c:var(--accent)">${c.emoji} ${c.name}</button>`).join('')}</div>
+    <div class="label">Valores por 100 g</div>
+    <div class="card item"><div class="item-grid four">
+      ${num('fk', 'Kcal', p.kcal != null ? r0(p.kcal) : '', '1')}${num('fp', 'Prot.', p.protein != null ? r1(p.protein) : '')}${num('fc', 'Hidr.', p.carbs != null ? r1(p.carbs) : '')}${num('ff', 'Grasa', p.fat != null ? r1(p.fat) : '')}
+    </div></div>
+    <div class="label">Ración (opcional)</div>
+    <div class="card item"><div class="item-grid two">
+      <label>Nombre<input id="fpl" value="${esc(pl)}" placeholder="unidad, loncha, vaso…"></label>
+      ${num('fpg', 'Gramos', pg, '1')}
+    </div></div>
+    <button class="btn primary" data-fsave style="margin-top:18px">${editing ? 'Guardar cambios' : 'Añadir alimento'}</button>`, body => {
+    const val = id => parseFloat(String(body.querySelector('#' + id).value).replace(',', '.'));
+    body.addEventListener('click', async e => {
+      if (e.target.closest('[data-back]')) return editing ? openFoodDetail(food) : openFoodBrowser('foods');
+      const c = e.target.closest('[data-fcat]');
+      if (c) {
+        cat = c.dataset.fcat;
+        body.querySelectorAll('[data-fcat]').forEach(b => b.classList.toggle('on', b === c));
+        return haptic();
+      }
+      if (!e.target.closest('[data-fsave]')) return;
+      const name = body.querySelector('#fname').value.trim();
+      if (!name) { body.querySelector('#fname').focus(); return toast('Ponle nombre al alimento'); }
+      const kcal = val('fk');
+      if (!(kcal >= 0)) { body.querySelector('#fk').focus(); return toast('Indica las kcal por 100 g'); }
+      const label = body.querySelector('#fpl').value.trim(), grams = val('fpg');
+      const saved = {
+        ...(editing ? { id: food.id, createdAt: food.createdAt } : { createdAt: Date.now() }),
+        name, cat, custom: true,
+        emoji: FOOD_CATS.find(x => x.id === cat)?.emoji || '🍽️',
+        per100: { kcal, protein: val('fp') || 0, carbs: val('fc') || 0, fat: val('ff') || 0 },
+        portions: label && grams > 0 ? [[label, grams]] : [],
+      };
+      saved.id = await db.putMyFood(saved);
+      await loadMyFoods();
+      haptic();
+      toast(editing ? 'Alimento actualizado' : 'Alimento añadido 🍽️');
+      browserState.cat = cat; browserState.q = '';
+      openFoodBrowser('foods');
+    });
+  });
+}
+
 // Crear / editar un plato: la misma pantalla que una comida, pero se guarda en «Mis platos»
 function openDishEditor(dish, editing = false) {
   openReview({ ...newDraft(), ...dish, mode: 'dish', types: dish.types?.length ? dish.types : [defaultType()] }, editing, true);
@@ -1416,7 +1518,7 @@ function mountPortion(el, food, ctx) {
       <button class="icon-btn star" data-pk="fav" aria-label="Guardar en mis alimentos">☆</button>
     </div>
     <div class="food-hero">
-      ${food.image ? `<img src="${esc(food.image)}" alt="">` : `<span class="e">${food.emoji || '🍽️'}</span>`}
+      ${foodThumb(food)}
       <div><b>${esc(food.name)}</b><small>100 g: ${r0(p.kcal)} kcal · P ${r1(p.protein)} · H ${r1(p.carbs)} · G ${r1(p.fat)}</small></div>
     </div>
     <div class="chips" style="margin-top:12px">
@@ -1511,3 +1613,126 @@ function toJpeg(img, max, quality) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', quality);
 }
+
+// ---------- Recetas: predeterminadas, guardadas y creadas con IA ----------
+let recipeQ = '';
+let savedRecipes = [];
+async function loadRecipes() {
+  savedRecipes = (await db.allRecipes()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return savedRecipes;
+}
+const recipeKcal = r => r0(r.items.reduce((a, i) => a + (+i.kcal || 0), 0));
+const recipeCard = (r, attr) => `
+  <button class="rc-card" ${attr}>
+    <span class="e">${r.emoji || '🍽️'}</span>
+    <b>${esc(r.name)}</b>
+    <small>${r.minutes ? `${r.minutes} min · ` : ''}${recipeKcal(r)} kcal</small>
+  </button>`;
+
+async function renderRecipes(el) {
+  await loadRecipes();
+  if (!el.isConnected) return;
+  const words = norm(recipeQ).split(/\s+/).filter(Boolean);
+  const match = r => words.every(w => norm(r.name).includes(w) || r.items.some(i => norm(i.name).includes(w)));
+  const mine = savedRecipes.filter(match), defs = COOKBOOK.filter(match);
+  el.innerHTML = `
+    <button class="btn primary" data-rai>✨ Crear receta</button>
+    <input class="search" id="rq" type="search" enterkeyhint="search" autocomplete="off" aria-label="Buscar" value="${esc(recipeQ)}" style="margin-top:12px">
+    <div data-rlist>
+      ${mine.length ? `<div class="label">⭐ Mis recetas</div><div class="rc-grid">${mine.map(r => recipeCard(r, `data-rmine="${r.id}"`)).join('')}</div>` : ''}
+      ${defs.length ? `<div class="label">📖 Recetas</div><div class="rc-grid">${defs.map(r => recipeCard(r, `data-rdef="${r.key}"`)).join('')}</div>` : ''}
+      ${!mine.length && !defs.length ? '<div class="card empty"><span class="e">🔍</span><b>Sin resultados</b></div>' : ''}
+    </div>`;
+  const q = el.querySelector('#rq');
+  q.addEventListener('input', () => {
+    recipeQ = q.value;
+    const pos = q.selectionStart;
+    renderRecipes(el).then(() => { const n = el.querySelector('#rq'); n?.focus(); n?.setSelectionRange(pos, pos); });
+  });
+}
+
+// Ficha de una receta. ai: receta recién creada (aún sin guardar)
+function openRecipe(r, { ai = null, inPlace = false } = {}) {
+  const tot = sumItems(r.items);
+  const html = `
+    <div class="rc-hero"><span class="e">${r.emoji || '🍽️'}</span>
+      <h2 class="sheet-title">${esc(r.name)}</h2>
+      ${r.minutes ? `<div class="muted small">⏱ ${r.minutes} min</div>` : ''}
+    </div>
+    <div class="card">${macroRow(tot)}</div>
+    <div class="label">Ingredientes</div>
+    <div class="card rc-ings">${r.items.map(i => `<div><span>${esc(i.name)}</span><b>${r0(i.grams)} g</b></div>`).join('')}</div>
+    ${r.steps?.length ? `<div class="label">Pasos</div><div class="card"><ol class="steps">${r.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol></div>` : ''}
+    <button class="btn primary" data-ruse style="margin-top:18px">🍽️ Apuntar como comida</button>
+    ${ai ? '<button class="btn secondary" data-rsave>⭐ Guardar receta</button><button class="btn ghost" data-ragain>🔄 Otra idea</button>' : ''}
+    ${r.id != null ? '<button class="btn ghost danger" data-rdel>Borrar receta</button>' : ''}`;
+  (inPlace ? setSheetContent : openSheet)(html, body => {
+    body.addEventListener('click', async e => {
+      if (e.target.closest('[data-ruse]')) {
+        return openReview(newDraft({ name: r.name, items: r.items.map(i => ({ ...i })) }), false, true);
+      }
+      if (e.target.closest('[data-rsave]')) {
+        const saved = { name: r.name, emoji: r.emoji, minutes: r.minutes, servings: 1, items: r.items, steps: r.steps, from: ai, createdAt: Date.now() };
+        saved.id = await db.putRecipe(saved);
+        haptic();
+        toast('Receta guardada ⭐');
+        closeSheet();
+        if (mode === 'recetas') renderNutrition();
+        return;
+      }
+      if (e.target.closest('[data-ragain]')) return runRecipeAI(ai);
+      if (e.target.closest('[data-rdel]')) {
+        if (!confirm(`¿Borrar «${r.name}»?`)) return;
+        await db.deleteRecipe(r.id);
+        closeSheet();
+        toast('Receta borrada');
+        if (mode === 'recetas') renderNutrition();
+      }
+    });
+  });
+}
+
+// Crear receta con IA a partir de lo que tienes
+function openRecipeAI(initial = '') {
+  const hasKey = hasAiKey();
+  openSheet(`
+    <h2 class="sheet-title">✨ Crear receta</h2>
+    <label class="field"><span>¿Qué tienes?</span>
+      <textarea id="ring" rows="3" placeholder="pollo, arroz, pimiento…">${esc(initial)}</textarea>
+    </label>
+    ${hasKey ? '' : '<div class="notice">Añade tu clave de IA en <b>Ajustes</b>.</div>'}
+    <button class="btn primary" id="rgo" style="margin-top:14px" ${hasKey ? '' : 'disabled'}>Crear receta</button>`, body => {
+    const ta = body.querySelector('#ring');
+    setTimeout(() => ta.focus(), 350);
+    body.querySelector('#rgo').addEventListener('click', () => {
+      const v = ta.value.trim();
+      if (!v) { ta.focus(); return toast('Escribe algunos ingredientes'); }
+      runRecipeAI(v);
+    });
+  });
+}
+
+async function runRecipeAI(ingredients) {
+  setSheetContent(`<div class="loading"><div class="spinner"></div><div>Creando receta…</div></div>`);
+  try {
+    const r = await createRecipe(ingredients);
+    openRecipe(r, { ai: ingredients, inPlace: true });
+  } catch (err) {
+    setSheetContent(`
+      <h2 class="sheet-title">✨ Crear receta</h2>
+      <div class="notice err">${esc(err.message)}</div>
+      <button class="btn primary" id="retry" style="margin-top:14px">Reintentar</button>
+      <button class="btn ghost" id="edit">Cambiar ingredientes</button>`, body => {
+      body.querySelector('#retry').addEventListener('click', () => runRecipeAI(ingredients));
+      body.querySelector('#edit').addEventListener('click', () => { closeSheet(true); openRecipeAI(ingredients); });
+    });
+  }
+}
+
+// ---------- Emoji de los alimentos (se puede cambiar tocándolo en su ficha) ----------
+const FOOD_EMOJIS = ['🥚', '🍳', '🥛', '🧀', '🧈', '🥩', '🍗', '🍖', '🥓', '🌭', '🍔', '🍟', '🍕', '🥪', '🌮', '🌯', '🥙', '🥗', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🍤', '🍙', '🍚', '🥘', '🥫', '🍞', '🥐', '🥖', '🥨', '🥯', '🧇', '🥞', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🫘', '🥜', '🌰', '🐟', '🦐', '🦑', '🥣', '🥤', '🧃', '☕', '🍵', '🍫', '🍪', '🍩', '🍰', '🧁', '🍦', '🍯', '🫒', '🍺', '🍷', '💪'];
+const foodEmoji = f => state.settings.foodEmoji?.[f.name] || f.emoji || '🍽️';
+// Miniatura: el emoji elegido manda sobre la foto del producto
+const foodThumb = f => (f.image && !state.settings.foodEmoji?.[f.name]
+  ? `<img src="${esc(f.image)}" alt="" loading="lazy">`
+  : `<span class="e">${foodEmoji(f)}</span>`);

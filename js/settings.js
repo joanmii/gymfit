@@ -169,6 +169,8 @@ async function exportData() {
     activity: await db.allActivity(),
     favorites: await db.allFavorites(),
     foodFavs: await db.allFoodFavs(),
+    myFoods: await db.allMyFoods(),
+    recipes: await db.allRecipes(),
   };
   const name = `gymfit-${new Date().toISOString().slice(0, 10)}.json`;
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
@@ -201,6 +203,8 @@ async function importData(file) {
     for (const a of data.activity || []) await db.putActivity(a);
     for (const f of data.favorites || []) await db.putFavorite(f);
     for (const f of data.foodFavs || []) await db.putFoodFav(f);
+    for (const f of data.myFoods || []) await db.putMyFood(f);
+    for (const r of data.recipes || []) await db.putRecipe(r);
     if (data.settings) { Object.assign(state.settings, data.settings); saveSettings(); }
     renderSettings();
     toast('Copia importada ✅');
