@@ -363,10 +363,10 @@ async function finishWorkout(s) {
 
 // ---------- Pitido al acabar el descanso ----------
 let audio = null;
-function unlockAudio() {   // iPhone solo deja sonar audio creado tras tocar la pantalla
+export function unlockAudio() {   // iPhone solo deja sonar audio creado tras tocar la pantalla
   try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume?.(); } catch { /* sin audio */ }
 }
-function beep() {
+export function beep() {
   if (!audio) return;
   try {
     [0, 0.22].forEach(t => {

@@ -388,7 +388,6 @@ function openGenerator() {
 
   const html = () => `
     <h2 class="sheet-title">✨ Crear rutina</h2>
-    <div class="muted small">Elige y te monto una rutina equilibrada. Luego puedes cambiar lo que quieras.</div>
 
     <div class="label">Duración</div>
     <div class="chips">

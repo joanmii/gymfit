@@ -2,7 +2,7 @@
 // GymFit — punto de entrada
 // =========================================================
 import { db } from './db.js';
-import { state } from './utils.js';
+import { state, saveSettings, backupDue } from './utils.js';
 import { initCalendar, renderCalendar } from './calendar.js';
 import { initRoutines, renderRoutines } from './routines.js';
 import { initStats, renderStats } from './stats.js';
@@ -27,6 +27,9 @@ async function start() {
   state.routines = await db.allRoutines();
   state.sessions = await db.allSessions();
   await refreshBodyWeight();
+
+  if (!state.settings.firstRun) { state.settings.firstRun = Date.now(); saveSettings(); }
+  document.querySelector('.tab[data-tab="settings"]')?.classList.toggle('dot', backupDue());
 
   for (const [name, v] of Object.entries(VIEWS)) v.init(document.getElementById(`view-${name}`));
 

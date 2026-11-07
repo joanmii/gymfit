@@ -51,7 +51,10 @@ const DEFAULTS = {
   protein: 150,
   carbs: 230,
   fat: 70,
-  stepsGoal: 8000,                 // pasos al día (0 = sin objetivo)
+  stepsGoal: 8000,
+  waterGoal: 8,                     // vasos de agua al día (0 = no mostrar)
+  lastBackup: 0,                    // última copia de seguridad exportada
+  firstRun: 0,                 // pasos al día (0 = sin objetivo)
   goalWeight: 0,                   // kg (0 = sin objetivo)
   height: 0,                       // cm, para calcular el IMC
   provider: 'gemini',              // 'gemini' (gratis) o 'claude' (de pago)
@@ -66,6 +69,9 @@ const DEFAULTS = {
 
 // ¿Hay una clave configurada para la IA elegida?
 export const hasAiKey = () => !!(state.settings.provider === 'claude' ? state.settings.apiKey : state.settings.geminiKey)?.trim();
+// ¿Toca hacer copia? Más de 30 días desde la última (o desde que empezaste a usar la app)
+export const backupDue = () => Date.now() - (state.settings.lastBackup || state.settings.firstRun || Date.now()) > 30 * 86400000;
+
 // Para texto y recetas también vale la clave de Groq
 export const hasTextAi = () => hasAiKey() || !!state.settings.groqKey?.trim();
 

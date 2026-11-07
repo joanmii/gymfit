@@ -1,10 +1,8 @@
 // =========================================================
 // Control de peso (dentro de Nutrición): pesadas, gráfica y
 // composición corporal.
-// La báscula Xiaomi no se puede leer por Bluetooth desde Safari,
-// así que los datos llegan de dos formas:
-//   - Apple Salud → un Atajo los copia y aquí se pegan
-//   - El archivo CSV que exporta Zepp Life (todo el historial)
+// Los datos de la báscula llegan leyendo la captura de Zepp Life
+// o importando el archivo CSV que exporta (todo el historial).
 // =========================================================
 import { db } from './db.js';
 import { line } from './charts.js';
@@ -194,7 +192,7 @@ export async function renderWeight(el) {
         <b>Aún no hay pesadas</b>
         Apunta tu peso con <b style="display:inline;font-size:inherit">+</b> o tráete el historial de tu báscula.
       </div>
-      <button class="btn primary" data-w="import">Importar de la báscula</button>
+      <button class="btn primary" data-w="import">Importar historial de Zepp Life</button>
       <button class="btn secondary" data-w="add">Apuntar peso a mano</button>`;
     bind();
     return;
@@ -298,7 +296,7 @@ export async function renderWeight(el) {
     </div>
     ${list.length > 10 ? `<button class="link" data-w="all" style="display:block;margin:8px auto 0">${showAll ? 'Ver menos' : `Ver las ${list.length} pesadas`}</button>` : ''}
 
-    <button class="btn secondary" data-w="import" style="margin-top:18px">⚖️ Importar de la báscula</button>`;
+    <button class="btn secondary" data-w="import" style="margin-top:18px">⚖️ Importar historial de Zepp Life</button>`;
   bind();
 }
 
@@ -352,7 +350,6 @@ export function openWeighIn(entry = null) {
         ${field(MT.fat)}${field(MT.muscle)}${field(MT.water)}
         ${field(MT.visceral, '1')}${field(MT.bone)}${field(MT.bmr, '1')}
       </div>
-      <div class="muted small" style="margin-top:8px">Los ves en Zepp Life al pesarte, en el informe de la báscula.</div>
     </details>
     ${editing ? '<button class="btn ghost danger" id="wdel" style="margin-top:10px">Borrar pesada</button>' : ''}
     <button class="btn primary" id="wsave" style="margin-top:16px">Guardar</button>`, body => {
@@ -418,69 +415,11 @@ export function openWeighIn(entry = null) {
   });
 }
 
-// ---------- Importar de la báscula ----------
-function openImport() {
-  openSheet(`
-    <h2 class="sheet-title">Importar de la báscula</h2>
-    <div class="muted small" style="line-height:1.45">
-      Tu Mi Body Composition Scale 2 guarda las pesadas en <b>Zepp Life</b>. Safari no deja a las webs usar Bluetooth,
-      así que GymFit no puede hablar con la báscula directamente, pero sí traerse los datos de dos formas:
-    </div>
-    <div class="action-list">
-      <button class="action" data-i="health" style="--c:color-mix(in srgb,var(--pink) 28%,transparent)"><span class="e">❤️</span><div>Desde Apple Salud<small>Con un Atajo · lo más cómodo para el día a día</small></div></button>
-      <button class="action" data-i="csv" style="--c:color-mix(in srgb,var(--blue) 28%,transparent)"><span class="e">📄</span><div>Archivo de Zepp Life<small>Todo tu historial con composición corporal</small></div></button>
-      <button class="action" data-i="man" style="--c:color-mix(in srgb,var(--muted) 22%,transparent)"><span class="e">✍️</span><div>Apuntar a mano<small>Copias el número de la báscula</small></div></button>
-    </div>`, body => {
-    body.addEventListener('click', e => {
-      const a = e.target.closest('[data-i]')?.dataset.i;
-      if (a === 'health') openHealthImport();
-      if (a === 'csv') openCsvImport();
-      if (a === 'man') openWeighIn();
-    });
-  });
-}
+// ---------- Importar el historial de Zepp Life (archivo CSV) ----------
+function openImport() { openCsvImport(false); }
 
-function openHealthImport() {
-  setSheetContent(`
-    <h2 class="sheet-title">Desde Apple Salud</h2>
-    <details class="w-more" ${localFlag('shortcut') ? '' : 'open'}>
-      <summary>Preparar el Atajo (solo la primera vez)</summary>
-      <ol class="steps" style="margin-top:10px">
-        <li>En <b>Zepp Life</b> conecta Apple Salud (Perfil → Añadir cuentas → Apple Salud) y permite escribir <b>Peso</b> y <b>Grasa corporal</b>.</li>
-        <li>Abre la app <b>Atajos</b> → <b>+</b> y añade <b>Buscar muestras de salud</b>: tipo <b>Peso</b>, ordenar por <b>Fecha de inicio</b>, <b>Más reciente primero</b>, límite <b>90</b>.</li>
-        <li>Añade <b>Repetir con cada</b>. Dentro pon un <b>Texto</b> con: <code>Elemento de repetición → Fecha de inicio</code> (formato <b>ISO 8601</b>), un <code>;</code> y <code>Elemento de repetición → Valor</code>.</li>
-        <li>Debajo de “Fin de repetición” añade <b>Copiar al portapapeles</b>.</li>
-        <li>Opcional, para la grasa: repite los pasos 2–3 con tipo <b>Porcentaje de grasa corporal</b> y escribe <code>grasa;</code> al principio del Texto. Junta los dos resultados en un Texto antes de copiar.</li>
-        <li>Llámalo “Peso a GymFit”. Ejecútalo, vuelve aquí y pulsa <b>Pegar</b>.</li>
-      </ol>
-      <div class="muted small" style="margin-top:8px">Cada línea copiada se parece a <code>2026-10-30T08:12:00+01:00;72,4</code>.</div>
-    </details>
-    <button class="btn primary" id="paste" style="margin-top:16px">📋 Pegar del portapapeles</button>
-    <label class="field"><span>…o pega aquí el texto</span>
-      <textarea id="ptext" rows="4" placeholder="2026-10-30T08:12:00+01:00;72,4"></textarea>
-    </label>
-    <button class="btn secondary" id="read" style="margin-top:10px">Leer texto</button>`, body => {
-    const ta = body.querySelector('#ptext');
-    body.querySelector('#paste').addEventListener('click', async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (!text.trim()) return toast('El portapapeles está vacío: ejecuta antes el Atajo');
-        localFlag('shortcut', true);
-        showPreview(parseWeights(text), 'salud', openHealthImport);
-      } catch {
-        toast('No he podido leer el portapapeles: pégalo en el cuadro');
-        ta.focus();
-      }
-    });
-    body.querySelector('#read').addEventListener('click', () => {
-      if (!ta.value.trim()) return toast('Pega antes el texto');
-      showPreview(parseWeights(ta.value), 'salud', openHealthImport);
-    });
-  });
-}
-
-function openCsvImport() {
-  setSheetContent(`
+function openCsvImport(inPlace = true) {
+  (inPlace ? setSheetContent : openSheet)(`
     <h2 class="sheet-title">Archivo de Zepp Life</h2>
     <ol class="steps">
       <li>En Zepp Life busca <b>Exportar datos</b> (Perfil → Ajustes → Cuenta, o Privacidad, según la versión). Te llega un enlace por correo.</li>
@@ -499,15 +438,6 @@ function openCsvImport() {
       catch { toast('No he podido leer el archivo'); }
     });
   });
-}
-
-// Recuerda pequeñas cosas en este iPhone (p. ej. si ya preparaste el Atajo)
-function localFlag(name, set) {
-  const k = `gymfit-w-${name}`;
-  try {
-    if (set !== undefined) localStorage.setItem(k, '1');
-    return localStorage.getItem(k) === '1';
-  } catch { return false; }
 }
 
 // Combina lo leído con lo que ya hay: cuenta nuevas y actualizadas
@@ -564,7 +494,7 @@ function showPreview(recs, source, back) {
   });
 }
 
-// ---------- Leer texto del Atajo o CSV ----------
+// ---------- Leer el CSV ----------
 // Devuelve una pesada por día: [{ date, time, weight, fat, ... }]
 export function parseWeights(text) {
   const lines = String(text).replace(/^﻿/, '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);

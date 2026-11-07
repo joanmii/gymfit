@@ -159,7 +159,6 @@ export function renderStats() {
         if (!w.attended) return -1;
         return Math.max(1, Math.min(4, (w.groups || []).length || 1));
       })}</div>
-      <div class="muted small" style="margin-top:8px">Más intenso = más grupos entrenados ese día.</div>
     </div>` : ''}
 
     ${progressCard()}
