@@ -69,13 +69,11 @@ export function initNutrition(el) {
   });
 
   document.getElementById('fab').addEventListener('click', () => (mode === 'peso' ? openWeighIn() : mode === 'recetas' ? openRecipeAI() : openAddMenu()));
-  for (const id of ['cam-input', 'gal-input']) {
-    document.getElementById(id).addEventListener('change', async e => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (file) startPhotoFlow(file);
-    });
-  }
+  document.getElementById('photo-input').addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) startPhotoFlow(file);
+  });
 }
 
 // ---------- Vista principal ----------
@@ -159,8 +157,7 @@ export async function renderNutrition() {
         </div>
         ${waterRow(water)}
       </div>
-      ${burned ? `<div class="act-note">Comido <b>${r0(tot.kcal)}</b> − actividad <b>${r0(burned)}</b> = <b>${r0(tot.kcal - burned)}</b> kcal netas</div>` : ''}
-      ${basalKcal() ? `<div class="act-note muted small">Gasto del día ≈ <b>${r0(basalKcal() * dayFraction(day) + burned).toLocaleString('es-ES')}</b> kcal</div>` : ''}
+      ${gastoNote(tot.kcal, kSteps, kGym)}
     </div>
 
     ${!isToday ? `<button class="btn secondary" data-today style="margin-bottom:6px">Volver a hoy</button>` : ''}
@@ -207,12 +204,16 @@ const modeSeg = () => `
     <button data-nmode="peso" class="${mode === 'peso' ? 'on' : ''}">⚖️ Peso</button>
   </div>`;
 
-// Parte del día ya transcurrida (el metabolismo basal se gasta poco a poco): hoy según la hora, días pasados enteros
-function dayFraction(d) {
-  const t = today();
-  if (+d < +t) return 1;
-  if (+d > +t) return 0;
-  return Math.min(1, (Date.now() - +t) / 86400000);
+// Gasto del día: metabolismo basal (el día entero) + digestión (~10 % de lo comido) + pasos + entreno
+function gastoNote(eaten, kSteps, kGym) {
+  const bmr = basalKcal();
+  if (!bmr) return '';
+  const tef = eaten * 0.1, n = v => r0(v).toLocaleString('es-ES');
+  const parts = [['Metabolismo basal', bmr], ['Digestión', tef], ['Pasos', kSteps], ['Entreno', kGym]].filter(([, v]) => v >= 1);
+  return `<details class="act-note gasto">
+    <summary>Gasto del día ≈ <b>${n(bmr + tef + kSteps + kGym)}</b> kcal</summary>
+    <div class="gasto-split">${parts.map(([l, v]) => `<span>${l}<b>${n(v)}</b></span>`).join('')}</div>
+  </details>`;
 }
 
 // Verde: ±200 kcal del objetivo · Amarillo: entre 200 y 500 · Rojo: más de 500 por arriba o por abajo
@@ -268,7 +269,7 @@ async function saveSteps(k, n) {
 // Agua del día: vasos de 250 ml
 function waterRow(water) {
   const g = +state.settings.waterGoal || 0;
-  if (!g) return '';
+  if (!state.settings.water || !g) return '';
   const pct = Math.min(100, Math.round(water / g * 100));
   return `<div class="act">
     <span class="e">💧</span>

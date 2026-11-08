@@ -99,7 +99,9 @@ export function heatmap(year, getLevel) {
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img">${out}</svg>`;
 }
 
-// Línea con puntos y área sombreada. points: [{ label, value }]
+// Línea con puntos y área sombreada. points: [{ label, value, tip?, text? }]
+// Al tocar la gráfica (o deslizar el dedo) se marca el punto más cercano con su valor y su fecha:
+// text es el valor ya escrito («75,2 kg») y tip la fecha completa (si no, se usa label)
 let lineId = 0;
 // opts.goal dibuja una línea discontinua de objetivo (solo si queda cerca de los datos)
 export function line(points, { height = 150, color = 'var(--accent)', unit = '', goal = null } = {}) {
@@ -135,8 +137,65 @@ export function line(points, { height = 150, color = 'var(--accent)', unit = '',
       out += `<text x="${a}" y="${H - 6}" text-anchor="middle" font-size="10.5" font-weight="${i === n - 1 ? 800 : 600}" fill="${i === n - 1 ? 'var(--text)' : 'var(--muted)'}">${esc(points[i].label)}</text>`;
     }
     if (i === maxI || i === n - 1) {
-      out += `<text x="${Math.min(W - 4, Math.max(4, a))}" y="${b - 9}" text-anchor="${a > W - 30 ? 'end' : a < 30 ? 'start' : 'middle'}" font-size="10.5" font-weight="700" fill="var(--text)">${esc(String(Math.round(vals[i] * 10) / 10).replace('.', ','))}${unit}</text>`;
+      out += `<text class="lv" x="${Math.min(W - 4, Math.max(4, a))}" y="${b - 9}" text-anchor="${a > W - 30 ? 'end' : a < 30 ? 'start' : 'middle'}" font-size="10.5" font-weight="700" fill="var(--text)">${esc(String(Math.round(vals[i] * 10) / 10).replace('.', ','))}${unit}</text>`;
     }
   });
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${out}</svg>`;
+  const num = v => String(Math.round(v * 10) / 10).replace('.', ',');
+  const data = points.map((p, i) => [+pts[i][0].toFixed(1), +pts[i][1].toFixed(1), p.text || `${num(p.value)}${unit}`, p.tip || p.label]);
+  return `<svg class="chart lchart" viewBox="0 0 ${W} ${H}" role="img" data-pts="${esc(JSON.stringify(data))}" data-c="${esc(color)}">${out}<g class="lc-tip"></g></svg>`;
+}
+
+// ---------- Tocar un punto de la línea ----------
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs) => { const e = document.createElementNS(SVG_NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+function clearTips(except) {
+  document.querySelectorAll('svg.lchart.tipping').forEach(svg => {
+    if (svg === except) return;
+    svg.classList.remove('tipping');
+    svg.querySelector('.lc-tip').replaceChildren();
+  });
+}
+function showTip(svg, clientX) {
+  let data;
+  try { data = JSON.parse(svg.dataset.pts); } catch { return; }
+  if (!data?.length) return;
+  const vb = svg.viewBox.baseVal, r = svg.getBoundingClientRect();
+  const vx = (clientX - r.left) / r.width * vb.width;
+  let best = 0;
+  data.forEach(([x], i) => { if (Math.abs(x - vx) < Math.abs(data[best][0] - vx)) best = i; });
+  if (svg.dataset.sel === String(best) && svg.classList.contains('tipping')) return;
+  svg.dataset.sel = best;
+  const [x, y, val, label] = data[best], c = svg.dataset.c, H = vb.height;
+  const g = svg.querySelector('.lc-tip');
+  g.replaceChildren(
+    el('line', { x1: x, x2: x, y1: 0, y2: H - 20, stroke: 'var(--muted)', 'stroke-width': 1, 'stroke-dasharray': '3 3' }),
+    el('circle', { cx: x, cy: y, r: 5.5, fill: c, stroke: 'var(--card)', 'stroke-width': 2.5 }),
+  );
+  // Burbuja con el valor y la fecha, encima del punto (o debajo si no cabe)
+  const t = el('text', { y: 0, 'font-size': 11.5, 'font-weight': 700, fill: 'var(--text)', 'text-anchor': 'middle' });
+  const b = el('tspan', {}); b.textContent = val;
+  const d = el('tspan', { fill: 'var(--muted)', 'font-weight': 600 }); d.textContent = ` · ${label}`;
+  t.append(b, d);
+  const box = el('rect', { rx: 8, fill: 'var(--card2)' });
+  g.append(box, t);
+  const w = t.getBBox().width + 18, h = 22;
+  const bx = Math.min(vb.width - w, Math.max(0, x - w / 2));
+  const by = y - h - 10 >= -6 ? y - h - 10 : y + 10;
+  box.setAttribute('x', bx); box.setAttribute('y', by); box.setAttribute('width', w); box.setAttribute('height', h);
+  t.setAttribute('x', bx + w / 2); t.setAttribute('y', by + 15);
+  svg.classList.add('tipping');
+}
+if (typeof document !== 'undefined') {
+  let dragging = null;
+  document.addEventListener('pointerdown', e => {
+    const svg = e.target.closest?.('svg.lchart');
+    clearTips(svg);
+    if (!svg) return;
+    dragging = svg;
+    showTip(svg, e.clientX);
+  });
+  document.addEventListener('pointermove', e => { if (dragging) showTip(dragging, e.clientX); });
+  const stop = () => { dragging = null; };
+  document.addEventListener('pointerup', stop);
+  document.addEventListener('pointercancel', stop);
 }

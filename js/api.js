@@ -247,6 +247,29 @@ export async function createRecipe(req) {
   };
 }
 
+// ---------- Convertir un plato en receta: pasos para esos ingredientes y cantidades ----------
+const STEPS_PROMPT = `Eres un cocinero. Te doy un plato con sus ingredientes y cantidades exactas.
+Explica cómo prepararlo usando SOLO esos ingredientes (y básicos sin apenas calorías: sal, especias, agua, caldo, limón, vinagre).
+Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta forma exacta:
+{"emoji":"","minutes":0,"tools":[""],"steps":[""],"notes":""}
+- tools: de entre Sartén, Olla, Horno, Airfryer, Microondas, Sin cocinar.
+- steps: de 3 a 8 pasos claros y concretos, en español, con tiempos y temperaturas cuando haga falta (p. ej. «Hornea a 200 °C 20 minutos»).
+- notes: un truco o consejo breve. minutes: tiempo total aproximado. emoji: un único emoji de comida.`;
+
+export async function recipeSteps({ name, items }) {
+  const prompt = `Plato: ${name}\nIngredientes:\n${items.map(i => `- ${i.name}: ${Math.round(+i.grams || 0)} g`).join('\n')}`;
+  const text = await textAI(prompt, { system: STEPS_PROMPT, temperature: 0.5 });
+  const match = (text || '').match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No he podido leer los pasos. Inténtalo otra vez.');
+  const j = JSON.parse(match[0]);
+  const steps = (j.steps || []).map(x => String(x).trim()).filter(Boolean);
+  if (!steps.length) throw new Error('La IA no ha devuelto pasos. Inténtalo otra vez.');
+  return {
+    emoji: [...String(j.emoji || '')][0] || null, minutes: Math.round(+j.minutes || 0) || null,
+    tools: (j.tools || []).map(String), steps, notes: String(j.notes || '').trim(),
+  };
+}
+
 // Prueba rápida de la clave
 export async function testConnection() {
   if (state.settings.provider === 'claude') {

@@ -4,7 +4,7 @@
 import { db } from './db.js';
 import { FOOD_CATS, FOODS, foodsByCat, norm, searchFoods } from './foods.js';
 import { esc, saveSettings, state, toast } from './utils.js';
-import { favKey, inType, MEAL_TYPES, typesOf } from './nut-core.js';
+import { favKey, inType, isRecipe, MEAL_TYPES, typesOf } from './nut-core.js';
 
 export async function setDishTypes(r, types) {
   if (r.id != null) {
@@ -46,6 +46,9 @@ async function migrateCookbook() {
     }
   } catch { /* nada */ }
 }
+
+export const myDishes = () => favCache.filter(r => r.items?.length && !isRecipe(r));
+export const myRecipes = () => favCache.filter(r => r.items?.length && isRecipe(r));
 
 export async function loadFavorites() {
   if (!migrated) { migrated = true; await migrateCookbook(); }

@@ -230,7 +230,13 @@ export async function renderWeight(el) {
   const weekly = pts.length > 60;
   if (weekly) pts = weeklyAverages(pts);
   const yearLabels = pts.length > 1 && daysBetween(fromKey(pts[0].date), fromKey(pts.at(-1).date)) > 120;
-  const chartPts = pts.map(p => ({ label: yearLabels ? MONTHS_SHORT[fromKey(p.date).getMonth()] : shortDate(p.date), value: p.value }));
+  // Al tocar un punto: su valor y su fecha (con el año si no es este)
+  const dec = metric === 'bmr' || metric === 'visceral' ? 0 : 1, unitTxt = M.unit === '%' ? '%' : M.unit ? ` ${M.unit}` : '';
+  const tipDate = k => `${shortDate(k)}${fromKey(k).getFullYear() === today().getFullYear() ? '' : ` ${fromKey(k).getFullYear()}`}`;
+  const chartPts = pts.map(p => ({
+    label: yearLabels ? MONTHS_SHORT[fromKey(p.date).getMonth()] : shortDate(p.date), value: p.value,
+    text: `${fmt(p.value, dec)}${unitTxt}`, tip: weekly ? `semana del ${tipDate(p.date)}` : tipDate(p.date),
+  }));
 
   // Composición de la última pesada que la tenga
   const lastComp = [...entries].reverse().find(e => COMP.some(m => e[m.id] != null));

@@ -2,16 +2,18 @@
 // Nutrición · Recetas: predeterminadas, guardadas y creadas con IA
 // =========================================================
 import { db } from './db.js';
-import { createRecipe } from './api.js';
+import { createRecipe, recipeSteps } from './api.js';
 import { norm } from './foods.js';
 import { BUILTIN } from './cookbook.js';
+import { chev } from './calendar.js';
 import { closeSheet, onSheetCleanup, openSheet, setSheetContent } from './sheet.js';
 import { beep, unlockAudio } from './workout.js';
 import { esc, haptic, hasTextAi, r0, r1, toast } from './utils.js';
 import { renderNutrition } from './nutrition.js';
-import { ALL_TYPES, defaultType, dishTypes, favKey, macroRow, newDraft, perServing, servingsOf, sumItems, TOOLS, TYPE, typeChips, typesOf, unitText } from './nut-core.js';
-import { favCache, foodThumb, listFoods, loadFavorites, loadFoodFavs, loadMyFoods, setDishTypes } from './nut-favs.js';
+import { ALL_TYPES, defaultType, dishTypes, favKey, ingList, macroRow, newDraft, perServing, servingsOf, sumItems, TOOLS, TYPE, typeChips, typesOf } from './nut-core.js';
+import { favCache, foodThumb, listFoods, loadFavorites, loadFoodFavs, loadMyFoods, myRecipes, setDishTypes } from './nut-favs.js';
 import { openReview } from './nut-review.js';
+import { openDishDetail } from './nut-foods.js';
 
 // ---------- Recetas: las predeterminadas y «Mis recetas» (guardadas, creadas a mano o con IA) ----------
 let recipeQ = '';
@@ -24,6 +26,19 @@ const stepMinutes = s => {
   return v > 0 && v <= 600 ? v : 0;
 };
 const clock = ms => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// Cantidades escritas en el texto («200 ml de caldo», «2 cucharadas de aceite») ajustadas a otro número de personas
+const AMOUNT = /(\d+(?:[.,]\d+)?)(\s*)(kg|g|ml|L|cucharadas?|cucharaditas?|vasos?|dientes?)(?![\wáéíóú])/g;
+function scaleAmounts(text, k) {
+  if (k === 1 || !text) return text;
+  return String(text).replace(AMOUNT, (all, num, sp, unit) => {
+    let v = parseFloat(num.replace(',', '.')) * k, u = unit;
+    if (u === 'L' && v < 1) { v *= 1000; u = 'ml'; } else if (u === 'ml' && v >= 1000) { v /= 1000; u = 'L'; }
+    if (u === 'g' || u === 'ml') v = v >= 50 ? Math.round(v / 10) * 10 : v >= 10 ? Math.round(v / 5) * 5 : Math.max(1, Math.round(v));
+    else if (u === 'kg' || u === 'L') v = Math.round(v * 10) / 10;
+    else { v = Math.max(0.5, Math.round(v * 2) / 2); u = u.replace(/s$/, '') + (v === 1 ? '' : 's'); }
+    return `${String(v).replace('.', ',')}${sp}${u}`;
+  });
+}
 const recipeEmoji = r => r.emoji || TYPE(typesOf(r)?.[0]).emoji;
 const recipeCard = (r, attr) => `
   <button class="rc-card" ${attr}>
@@ -37,7 +52,7 @@ export async function renderRecipes(el) {
   if (!el.isConnected) return;
   const words = norm(recipeQ).split(/\s+/).filter(Boolean);
   const match = r => words.every(w => norm(r.name).includes(w) || r.items.some(i => norm(i.name).includes(w)));
-  const mine = favCache.filter(r => r.items?.length && match(r)), defs = BUILTIN.filter(match);
+  const mine = myRecipes().filter(match), defs = BUILTIN.filter(match);
   el.innerHTML = `
     <div class="rc-actions">
       <button class="btn primary" data-rai>✨ Crear con IA</button>
@@ -65,36 +80,42 @@ export function openRecipeEditor(r = {}, editing = false, inSheet = true) {
     ...(editing ? { id: r.id, createdAt: r.createdAt } : {}),
     emoji: r.emoji || null, minutes: r.minutes || null, tools: [...(r.tools || [])], steps: [...(r.steps || [])],
     servings: servingsOf(r), notes: [r.also ? `Además: ${r.also}` : '', r.notes || ''].filter(Boolean).join('\n'),
-    mode: 'dish', types: r.types?.length ? r.types : [defaultType()],
+    mode: 'recipe', types: r.types?.length ? r.types : [defaultType()],
   }, editing, inSheet);
 }
 
-// Ficha de una receta. req: petición con la que la creó la IA (si aún no está guardada)
-export function openRecipe(r, { req = null, inPlace = false } = {}) {
+// Ficha de una receta. preview: aún no está guardada (la acaba de hacer la IA); again: pedir otra versión;
+// back: { label, fn } para volver a donde se abrió
+export function openRecipe(r, { preview = false, again = null, againLabel = '🔄 Otra idea', back = null, inPlace = false } = {}) {
   const own = r.id != null;
   const n = servingsOf(r);
   const tot = sumItems(perServing(r));
   const meta = [r.minutes ? `⏱ ${r.minutes} min` : '', (r.tools || []).join(', '), n > 1 ? `${n} raciones` : ''].filter(Boolean).join(' · ');
-  const savedCopy = () => (own ? r : favCache.find(s => favKey(s.name) === favKey(r.name)));
+  const savedCopy = () => (own ? r : myRecipes().find(s => favKey(s.name) === favKey(r.name)));
   const html = `
+    ${back ? `<button class="link back" data-rback>${chev('l')} ${back.label}</button>` : ''}
     <div class="rc-hero">${r.photo ? `<img src="${r.photo}" alt="">` : `<span class="e">${recipeEmoji(r)}</span>`}
       <h2 class="sheet-title">${esc(r.name)}</h2>
       ${meta ? `<div class="muted small">${esc(meta)}</div>` : ''}
     </div>
     <div class="card">${macroRow(tot)}${n > 1 ? '<div class="muted small rc-per">por ración</div>' : ''}</div>
-    <div class="label">Ingredientes${n > 1 ? ` · ${n} raciones` : ''}</div>
-    <div class="card rc-ings">${r.items.map(i => `<div><span>${esc(i.name)}</span><b>${r0(i.grams)} g${i.unitG ? ` · ${unitText(i).replace(/<\/?b>/g, '')}` : ''}</b></div>`).join('')}</div>
-    ${r.also ? `<div class="muted small rc-also">Además: ${esc(r.also)}</div>` : ''}
+    <div class="card rc-ppl"><span>👥 Personas</span>
+      <div class="stepper"><button class="icon-btn" data-ppl="-1" aria-label="Menos" ${n > 1 ? '' : 'disabled'}>−</button><b data-pn>${n}</b><button class="icon-btn" data-ppl="1" aria-label="Más">+</button></div></div>
+    <div class="label">Ingredientes</div>
+    <div data-ings>${ingList(r.items)}</div>
+    ${r.also ? `<div class="muted small rc-also" data-also>Además: ${esc(r.also)}</div>` : ''}
     ${r.steps?.length ? `<div class="label">Pasos</div><div class="card how"><ol class="steps">${r.steps.map((s, i) => {
       const m = stepMinutes(s);
-      return `<li>${esc(s)}${m ? `<button class="step-timer" data-tm="${i}" data-min="${m}">⏱ ${m} min</button>` : ''}</li>`;
+      return `<li><span data-st="${i}">${esc(s)}</span>${m ? `<button class="step-timer" data-tm="${i}" data-min="${m}">⏱ ${m} min</button>` : ''}</li>`;
     }).join('')}</ol></div>` : ''}
-    ${r.notes ? `<div class="label">Notas</div><div class="card rc-notes">${esc(r.notes)}</div>` : ''}
-    ${req ? '' : `<div class="label">🏷️ Aparece en</div>${typeChips(t => dishTypes(r).includes(t), 'data-dt')}`}
+    ${r.notes ? `<div class="label">Notas</div><div class="card rc-notes" data-notes>${esc(r.notes)}</div>` : ''}
+    ${preview ? '' : `<div class="label">🏷️ Aparece en</div>${typeChips(t => dishTypes(r).includes(t), 'data-dt')}`}
     <button class="btn primary" data-ruse style="margin-top:18px">🍽️ ${n > 1 ? 'Apuntar 1 ración' : 'Apuntar como comida'}</button>
     ${own
       ? '<button class="btn secondary" data-redit>✏️ Editar</button><button class="btn ghost danger" data-rdel>Borrar receta</button>'
-      : `<button class="btn secondary" data-rsave></button>${req ? '<button class="btn ghost" data-rcopy>✏️ Modificar</button><button class="btn ghost" data-ragain>🔄 Otra idea</button>' : '<button class="btn ghost" data-rcopy>✏️ Copiar y modificar</button>'}`}`;
+      : `<button class="btn secondary" data-rsave></button>${preview
+        ? `<button class="btn ghost" data-rcopy>✏️ Modificar</button>${again ? `<button class="btn ghost" data-ragain>${againLabel}</button>` : ''}`
+        : '<button class="btn ghost" data-rcopy>✏️ Copiar y modificar</button>'}`}`;
   (inPlace ? setSheetContent : openSheet)(html, body => {
     const sb = body.querySelector('[data-rsave]');
     const paintSave = () => { if (sb) sb.textContent = savedCopy() ? '★ Guardada · quitar' : '⭐ Guardar en mis recetas'; };
@@ -102,7 +123,25 @@ export function openRecipe(r, { req = null, inPlace = false } = {}) {
     const timers = new Map();
     onSheetCleanup(() => timers.forEach(id => clearInterval(id)));
     const stopTimer = b => { clearInterval(timers.get(b.dataset.tm)); timers.delete(b.dataset.tm); b.classList.remove('run'); b.textContent = `⏱ ${b.dataset.min} min`; };
+    // Para cuántas personas: cambian los ingredientes y las cantidades de los pasos (las raciones son las mismas)
+    let people = n;
+    const paintPeople = () => {
+      const k = people / n, set = (sel, txt) => { const el = body.querySelector(sel); if (el) el.textContent = txt; };
+      body.querySelector('[data-pn]').textContent = people;
+      body.querySelector('[data-ppl="-1"]').disabled = people <= 1;
+      body.querySelector('[data-ings]').innerHTML = ingList(perServing(r, people));
+      set('[data-also]', `Además: ${scaleAmounts(r.also, k)}`);
+      set('[data-notes]', scaleAmounts(r.notes, k));
+      (r.steps || []).forEach((s, i) => set(`[data-st="${i}"]`, scaleAmounts(s, k)));
+    };
     body.addEventListener('click', async e => {
+      if (e.target.closest('[data-rback]')) return back.fn();
+      const pp = e.target.closest('[data-ppl]');
+      if (pp) {
+        people = Math.min(20, Math.max(1, people + Number(pp.dataset.ppl)));
+        paintPeople();
+        return haptic();
+      }
       const tb = e.target.closest('[data-tm]');
       if (tb) {
         if (timers.has(tb.dataset.tm)) return stopTimer(tb);
@@ -143,9 +182,10 @@ export function openRecipe(r, { req = null, inPlace = false } = {}) {
             items: r.items, ...(n > 1 ? { servings: n } : {}),
             ...(r.notes || r.also ? { notes: [r.also ? `Además: ${r.also}` : '', r.notes || ''].filter(Boolean).join('\n') } : {}),
             kcal: r0(tot.kcal), protein: r1(tot.protein), carbs: r1(tot.carbs), fat: r1(tot.fat),
-            ...(req ? {} : { types: dishTypes(r) }), custom: true, createdAt: Date.now(),
+            ...(r.types?.length || !preview ? { types: r.types?.length ? r.types : dishTypes(r) } : {}),
+            kind: 'recipe', custom: true, createdAt: Date.now(),
           });
-          toast('Receta guardada ⭐');
+          toast('Guardada en mis recetas 📖');
         }
         await loadFavorites();
         haptic();
@@ -154,7 +194,7 @@ export function openRecipe(r, { req = null, inPlace = false } = {}) {
         return;
       }
       if (e.target.closest('[data-redit]')) return openRecipeEditor({ ...r, types: dishTypes(r) }, true);
-      if (e.target.closest('[data-rcopy]')) return openRecipeEditor({ ...r, name: req ? r.name : `${r.name} (mía)`, types: dishTypes(r) });
+      if (e.target.closest('[data-rcopy]')) return openRecipeEditor({ ...r, name: preview ? r.name : `${r.name} (mía)`, types: r.types?.length ? r.types : dishTypes(r) });
       if (e.target.closest('[data-rdel]')) {
         if (!confirm(`¿Borrar «${r.name}»?`)) return;
         await db.deleteFavorite(r.id);
@@ -163,7 +203,7 @@ export function openRecipe(r, { req = null, inPlace = false } = {}) {
         renderNutrition();
         return toast('Receta borrada');
       }
-      if (e.target.closest('[data-ragain]')) return runRecipeAI(req);
+      if (e.target.closest('[data-ragain]')) return again();
     });
   });
 }
@@ -299,7 +339,7 @@ async function runRecipeAI(req) {
       tools: req.tools, time: req.time,
     });
     r.tools = req.tools;
-    openRecipe(r, { req, inPlace: true });
+    openRecipe(r, { preview: true, again: () => runRecipeAI(req), inPlace: true });
   } catch (err) {
     setSheetContent(`
       <h2 class="sheet-title">✨ Crear receta</h2>
@@ -308,6 +348,30 @@ async function runRecipeAI(req) {
       <button class="btn ghost" id="edit">Cambiar</button>`, body => {
       body.querySelector('#retry').addEventListener('click', () => runRecipeAI(req));
       body.querySelector('#edit').addEventListener('click', () => { closeSheet(true); openRecipeAI(req); });
+    });
+  }
+}
+
+// ---------- Convertir un plato en receta: la IA escribe los pasos para esos ingredientes ----------
+export async function convertToRecipe(d) {
+  if (!hasTextAi()) return toast('Añade tu clave de IA en Ajustes');
+  const back = { label: 'Plato', fn: () => openDishDetail(d) };
+  setSheetContent(`<div class="loading"><div class="spinner"></div><div>Escribiendo los pasos…</div></div>`);
+  try {
+    const x = await recipeSteps({ name: d.name, items: d.items });
+    openRecipe({
+      name: d.name, photo: d.photo || null, emoji: x.emoji || d.emoji || null, items: d.items.map(i => ({ ...i })),
+      types: typesOf(d) || undefined, servings: 1, minutes: x.minutes,
+      tools: x.tools.filter(t => TOOLS.some(([n]) => n === t)), steps: x.steps, notes: x.notes,
+    }, { preview: true, again: () => convertToRecipe(d), againLabel: '🔄 Otros pasos', back, inPlace: true });
+  } catch (err) {
+    setSheetContent(`
+      <button class="link back" data-rback>${chev('l')} Plato</button>
+      <h2 class="sheet-title">✨ Convertir en receta</h2>
+      <div class="notice err">${esc(err.message)}</div>
+      <button class="btn primary" id="retry" style="margin-top:14px">Reintentar</button>`, body => {
+      body.querySelector('#retry').addEventListener('click', () => convertToRecipe(d));
+      body.querySelector('[data-rback]').addEventListener('click', back.fn);
     });
   }
 }

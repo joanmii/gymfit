@@ -169,3 +169,10 @@ export function toJpeg(img, max, quality) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', quality);
 }
+
+// Plato: lo que sueles comer (alimentos y cantidades). Receta: cómo se cocina (con pasos).
+// Los dos se guardan en favoritos; las recetas llevan kind 'recipe' (las antiguas, pasos).
+export const isRecipe = r => (r.kind ? r.kind === 'recipe' : !!r.steps?.length);
+// Lista de ingredientes con sus gramos (y unidades si van por piezas)
+export const ingList = items => `<div class="card rc-ings">${items.map(i =>
+  `<div><span>${esc(i.name)}</span><b>${r0(i.grams)} g${i.unitG ? ` · ${unitText(i).replace(/<\/?b>/g, '')}` : ''}</b></div>`).join('')}</div>`;

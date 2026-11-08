@@ -7,9 +7,8 @@ import { openScanner } from './barcode.js';
 import { chev } from './calendar.js';
 import { closeSheet, onSheetCleanup, openSheet, setSheetContent } from './sheet.js';
 import { addDays, esc, fmtLong, haptic, hasAiKey, hasTextAi, keyOf, r0, r1, toast, today } from './utils.js';
-import { renderNutrition } from './nutrition.js';
 import { blankItem, day, defaultType, gradeBadge, inType, loadImage, MEAL_TYPES, mealScore, newDraft, perServing, servingsOf, sumItems, toJpeg, TYPE } from './nut-core.js';
-import { favCache, loadFavorites } from './nut-favs.js';
+import { loadFavorites, myDishes } from './nut-favs.js';
 import { openReview } from './nut-review.js';
 import { browserState, openFoodBrowser, pickerState } from './nut-foods.js';
 
@@ -26,44 +25,26 @@ export function openAddMenu(inPlace = false) {
       ${tile('cam', '📷', 'Foto', 'La IA lo calcula', 'var(--accent)')}
       ${tile('txt', '🎙️', 'Describir', 'Por texto o voz', 'var(--purple)')}
       ${tile('bar', '🏷️', 'Código de barras', 'Envasados exactos', 'var(--blue)')}
-      ${tile('gal', '🖼️', 'Galería', 'Foto que ya tengas', 'var(--orange)')}
+      ${tile('list', '🥕', 'Alimentos', 'Y tus platos', 'var(--orange)')}
     </div>
     <button class="action" data-a="man" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">✍️</span><b>Introducir a mano</b></button>
-    <button class="action" data-a="copy" hidden style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">↺</span><b>Repetir el día anterior</b></button>
-    <button class="action" data-a="list" style="--c:color-mix(in srgb,var(--muted) 22%,transparent);margin-top:10px"><span class="e">🍽️</span><b>Alimentos</b></button>
     <div id="favs"></div>
     <div id="recent"></div>`, body => {
     body.addEventListener('click', e => {
       const a = e.target.closest('[data-a]')?.dataset.a;
-      if (a === 'cam') { closeSheet(true); document.getElementById('cam-input').click(); }
-      if (a === 'gal') { closeSheet(true); document.getElementById('gal-input').click(); }
+      if (a === 'cam') { closeSheet(true); document.getElementById('photo-input').click(); }
       if (a === 'txt') openDescribe();
       if (a === 'bar') openScanner(product => openReview(newDraft(productToDraft(product)), false, true));
       if (a === 'man') openReview(newDraft({ items: [blankItem()] }), false, true);
-      if (a === 'list') { browserState.q = ''; openFoodBrowser(); }
+      if (a === 'list') { browserState.q = ''; browserState.tab = 'foods'; openFoodBrowser(); }
       const r = e.target.closest('[data-recent]');
       if (r) repeatMeal(recentCache[Number(r.dataset.recent)]);
       const f = e.target.closest('[data-fav]');
-      if (f) repeatMeal(favCache[Number(f.dataset.fav)], favType);
+      if (f) repeatMeal(dishList[Number(f.dataset.fav)], favType);
       const ft = e.target.closest('[data-ftype]');
       if (ft) { favType = ft.dataset.ftype; haptic(); paintFavList(body.querySelector('#favs')); }
     });
     renderFavorites(body.querySelector('#favs'));
-    const prevKey = keyOf(addDays(day, -1));
-    db.mealsByDate(prevKey).then(prev => {
-      const b = body.querySelector('[data-a="copy"]');
-      if (!b || !prev.length) return;
-      b.hidden = false;
-      b.querySelector('b').textContent = `Repetir el día anterior · ${prev.length} ${prev.length === 1 ? 'comida' : 'comidas'}`;
-      b.onclick = async () => {
-        if ((await db.mealsByDate(keyOf(day))).length && !confirm('Ya tienes comidas apuntadas. ¿Añadir también las del día anterior?')) return;
-        const now = Date.now();
-        for (const [i, { id, ...m }] of prev.entries()) await db.putMeal({ ...m, date: keyOf(day), createdAt: now + i });
-        closeSheet();
-        renderNutrition();
-        toast(`Copiadas ${prev.length} ${prev.length === 1 ? 'comida' : 'comidas'} ↺`);
-      };
-    });
     renderRecent(body.querySelector('#recent'));
   });
 }
@@ -85,13 +66,15 @@ const fold = (title, count, inner) => `
 
 // Favoritos del menú «Añadir comida»: pestañas por tipo (empieza en el de la hora actual)
 let favType = 'comida';
+let dishList = [];   // «Mis platos» del desplegable
 async function renderFavorites(el) {
   await loadFavorites();
   if (!el.isConnected) return;
   favType = defaultType();
-  if (!favCache.length) { el.innerHTML = ''; return; }
-  el.innerHTML = fold('⭐ Mis recetas', favCache.length, `<div class="chips scroll fav-types">${MEAL_TYPES.map(t => {
-        const n = favCache.filter(f => inType(f, t.id)).length;
+  dishList = myDishes();
+  if (!dishList.length) { el.innerHTML = ''; return; }
+  el.innerHTML = fold('⭐ Mis platos', dishList.length, `<div class="chips scroll fav-types">${MEAL_TYPES.map(t => {
+        const n = dishList.filter(f => inType(f, t.id)).length;
         return `<button class="chip" data-ftype="${t.id}" style="--c:var(--accent)">${t.emoji} ${t.name}${n ? ` · ${n}` : ''}</button>`;
       }).join('')}</div><div data-favlist></div>`);
   paintFavList(el);
@@ -99,10 +82,10 @@ async function renderFavorites(el) {
 
 function paintFavList(el) {
   el.querySelectorAll('[data-ftype]').forEach(b => b.classList.toggle('on', b.dataset.ftype === favType));
-  const list = favCache.map((m, i) => [m, i]).filter(([m]) => inType(m, favType));
+  const list = dishList.map((m, i) => [m, i]).filter(([m]) => inType(m, favType));
   el.querySelector('[data-favlist]').innerHTML = list.length
     ? `<div class="recent-list">${list.map(([m, i]) => recentRow(m, `data-fav="${i}"`)).join('')}</div>`
-    : `<div class="muted small" style="margin:6px 2px 0">Ninguna de ${TYPE(favType).name.toLowerCase()}</div>`;
+    : `<div class="muted small" style="margin:6px 2px 0">Ninguno de ${TYPE(favType).name.toLowerCase()}</div>`;
 }
 
 // ---------- Comidas recientes (repetir con un toque) ----------

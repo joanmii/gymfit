@@ -357,6 +357,8 @@ h3 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
 .kpi-value small { font-size: 16px; color: var(--muted); font-weight: 600; margin-left: 2px; }
 .kpi-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
 .kpi-hero { display: flex; align-items: center; gap: 18px; }
+.kpi-pct { font-size: 44px; display: flex; align-items: center; gap: 8px; }
+.kpi-party { font-size: 32px; line-height: 1; }
 .ring-wrap { position: relative; flex: none; display: grid; place-items: center; }
 .ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .ring-center b { font-family: var(--rounded); font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
@@ -770,6 +772,8 @@ a.btn { text-decoration: none; color: var(--text); }
 .totals-row.three { grid-template-columns: repeat(3, 1fr); }
 .totals-row b small { font-size: 12px; color: var(--muted); }
 .chart .ln { stroke-dasharray: 1; animation: draw 1s var(--spring) both; }
+.chart.lchart { touch-action: pan-y; cursor: pointer; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.chart.lchart.tipping .lv { opacity: 0; }
 @keyframes draw { from { stroke-dashoffset: 1; } }
 .hist { margin-top: 10px; border-top: .5px solid var(--line); }
 .hist div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 2px; border-bottom: .5px solid var(--line); font-size: 14px; }
@@ -852,6 +856,12 @@ button.act:active { transform: scale(.98); }
 .act .k small { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
 .act-note { font-size: 13px; margin-top: 10px; text-align: center; color: var(--muted); }
 .act-note b { color: var(--text); font-family: var(--rounded); }
+.gasto summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.gasto summary::-webkit-details-marker { display: none; }
+.gasto summary::after { content: ''; width: 6px; height: 6px; border: solid currentColor; border-width: 0 2px 2px 0; transform: translateY(-2px) rotate(45deg); transition: transform .2s; }
+.gasto[open] summary::after { transform: translateY(1px) rotate(225deg); }
+.gasto-split { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 8px; }
+.gasto-split span { display: inline-flex; gap: 5px; padding: 4px 10px; border-radius: 999px; background: var(--card2); font-size: 12px; font-weight: 600; }
 .burn-line { text-align: center; font-size: 15px; color: var(--muted); padding-top: 2px; }
 .burn-line b { color: var(--orange); font-family: var(--rounded); font-size: 18px; }
 
@@ -1054,3 +1064,22 @@ button.act:active { transform: scale(.98); }
 .portion-row .pm i { font-style: normal; margin-right: 8px; }
 
 [hidden] { display: none !important; }
+
+/* Interruptor (Ajustes) */
+.list-row input.switch, input.switch { appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 51px; height: 31px; margin: 0; border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 30%, transparent); transition: background .2s; cursor: pointer; }
+input.switch::before { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .2); transition: transform .2s var(--spring, ease); }
+input.switch:checked { background: var(--accent); }
+input.switch:checked::before { transform: translateX(20px); }
+/* IA: las tres en la misma tarjeta */
+.ai-seg button i { font-style: normal; color: var(--accent); font-weight: 800; }
+.ai-sum { margin: 10px 2px 2px; text-align: center; }
+.ai-sum b { color: var(--text); }
+/* Calcular objetivos */
+.calc-hint { margin: 8px 4px 0; }
+.calc-how { text-align: center; margin-top: 2px; line-height: 1.5; }
+.calc-how b { color: var(--text); }
+/* Recetas: para cuántas personas */
+.rc-ppl { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px 10px 16px; font-size: 16px; font-weight: 600; }
+.rc-ppl .icon-btn:disabled { opacity: .35; }

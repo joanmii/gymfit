@@ -19,6 +19,7 @@ const VIEWS = {
 };
 const LAST_TAB = 'gymfit-tab';
 let currentTab = null;
+let updatePending = false;   // hay una versión nueva de la app esperando
 
 async function start() {
   // Cargar entrenamientos en memoria
@@ -46,11 +47,21 @@ async function start() {
   // Service worker (necesita HTTPS o localhost)
   if ('serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
+    // Versión nueva: recarga al momento si acabas de abrir la app, o la próxima vez que vuelvas a ella
+    // (así Safari no se queda enseñando la versión antigua guardada)
+    const hadSW = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadSW || updatePending) return;
+      updatePending = true;
+      if (performance.now() < 15000 && !document.querySelector('.sheet.open')) location.reload();
+    });
   }
 
   // Al volver a la app (p. ej. al día siguiente) refrescar la vista
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && currentTab) VIEWS[currentTab].render();
+    if (document.visibilityState !== 'visible') return;
+    if (updatePending && !document.querySelector('.sheet.open')) return location.reload();
+    if (currentTab) VIEWS[currentTab].render();
   });
 }
 

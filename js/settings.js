@@ -3,11 +3,12 @@
 // =========================================================
 import { db } from './db.js';
 import { testConnection, testGroq } from './api.js';
-import { state, saveSettings, esc, toast, backupDue } from './utils.js';
-import { bodyKg, hasBodyWeight } from './energy.js';
+import { state, saveSettings, esc, toast, backupDue, hasAiKey } from './utils.js';
+import { bodyKg, hasBodyWeight, mifflin, refreshBodyWeight, savedBmr } from './energy.js';
 import { openSheet, closeSheet } from './sheet.js';
 
 let root;
+let aiTab = null;   // pestaña de IA que se está viendo: gemini, claude o groq
 const APP_VERSION = '1.3.0';
 
 export function initSettings(el) {
@@ -16,6 +17,11 @@ export function initSettings(el) {
   root.addEventListener('change', e => {
     const k = e.target.dataset.k;
     if (!k) return;
+    if (e.target.type === 'checkbox') {
+      state.settings[k] = e.target.checked;
+      saveSettings();
+      return renderSettings();
+    }
     if (e.target.type === 'number') {
       const v = e.target.step === '0.1' ? Math.round(parseFloat(e.target.value) * 10) / 10 : parseInt(e.target.value, 10);
       if (!(v >= 0)) { e.target.value = state.settings[k]; return; }
@@ -24,6 +30,9 @@ export function initSettings(el) {
       state.settings[k] = e.target.value.trim();
     }
     saveSettings();
+    const sum = root.querySelector('#ai-sum');
+    if (sum) sum.innerHTML = aiSummary();
+    root.querySelectorAll('[data-aitab]').forEach(b => { b.innerHTML = aiTabLabel(b.dataset.aitab); });
     toast('Guardado');
   });
 
@@ -32,10 +41,10 @@ export function initSettings(el) {
       const inp = root.querySelector('#apikey');
       inp.type = inp.type === 'password' ? 'text' : 'password';
     }
-    const prov = e.target.closest('[data-provider]');
-    if (prov) {
-      state.settings.provider = prov.dataset.provider;
-      saveSettings();
+    const tab = e.target.closest('[data-aitab]');
+    if (tab) {
+      aiTab = tab.dataset.aitab;
+      if (aiTab !== 'groq') { state.settings.provider = aiTab; saveSettings(); }   // Groq solo hace texto: las fotos siguen con Gemini o Claude
       renderSettings();
       return;
     }
@@ -88,7 +97,8 @@ export function renderSettings() {
         <span class="unit">${unit}</span>
       </div>
     </div>`;
-  const isGemini = S.provider !== 'claude';
+  const tab = aiTab || (S.provider === 'claude' ? 'claude' : 'gemini');
+  const isGemini = tab === 'gemini';
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
 
   root.innerHTML = `
@@ -117,7 +127,8 @@ export function renderSettings() {
     <div class="section-label">Actividad</div>
     <div class="list">
       ${row('stepsGoal', 'Objetivo de pasos diarios', 'pasos')}
-      ${row('waterGoal', 'Objetivo de agua', 'vasos')}
+      <div class="list-row"><label for="s-water">Apuntar el agua</label><input id="s-water" class="switch" data-k="water" type="checkbox" ${S.water ? 'checked' : ''}></div>
+      ${S.water ? row('waterGoal', 'Objetivo de agua', 'vasos') : ''}
     </div>
 
     <div class="section-label">Peso</div>
@@ -128,16 +139,26 @@ export function renderSettings() {
 
     <div class="section-label">Inteligencia artificial</div>
     <div class="card">
-      <div class="seg" style="margin-bottom:6px">
-        <button data-provider="gemini" class="${isGemini ? 'on' : ''}">Gemini · gratis</button>
-        <button data-provider="claude" class="${isGemini ? '' : 'on'}">Claude · de pago</button>
+      <div class="seg ai-seg">
+        ${['gemini', 'claude', 'groq'].map(id => `<button data-aitab="${id}" class="${tab === id ? 'on' : ''}">${aiTabLabel(id)}</button>`).join('')}
       </div>
+      <div class="muted small ai-sum" id="ai-sum">${aiSummary()}</div>
+      ${tab === 'groq' ? `
+      <label class="field"><span>Clave de Groq</span>
+        <div class="input-wrap">
+          <input id="groqkey" data-k="groqKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="gsk_..." value="${esc(S.groqKey)}">
+          <button class="icon-btn" id="eye-groq" aria-label="Mostrar u ocultar clave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+      </label>
+      <label class="field"><span>Modelo</span>
+        <input data-k="groqModel" autocapitalize="off" spellcheck="false" value="${esc(S.groqModel)}">
+      </label>
+      <button class="btn secondary" id="test-groq" style="margin-top:14px">Probar Groq</button>
+      <div class="muted small" style="margin-top:12px">Gratis en console.groq.com → <b>API Keys</b>. Solo texto y recetas (muy rápida): las fotos van con Gemini o Claude.</div>` : `
       <label class="field"><span>${isGemini ? 'Clave de la API de Gemini' : 'Clave de la API de Claude'}</span>
         <div class="input-wrap">
           <input id="apikey" data-k="${isGemini ? 'geminiKey' : 'apiKey'}" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${isGemini ? 'AIza...' : 'sk-ant-...'}" value="${esc(isGemini ? S.geminiKey : S.apiKey)}">
-          <button class="icon-btn" id="eye" aria-label="Mostrar u ocultar clave">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
+          <button class="icon-btn" id="eye" aria-label="Mostrar u ocultar clave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
       </label>
       <label class="field"><span>${isGemini ? 'Modelo para fotos' : 'Modelo'}</span>
@@ -149,24 +170,7 @@ export function renderSettings() {
       <button class="btn secondary" id="test" style="margin-top:14px">Probar conexión</button>
       <div class="muted small" style="margin-top:12px">
         ${isGemini ? 'Gratis en aistudio.google.com → <b>Get API key</b>.' : 'De pago en console.anthropic.com → <b>API Keys</b>.'}
-      </div>
-    </div>
-
-    <div class="section-label">Texto y recetas · opcional</div>
-    <div class="card">
-      <label class="field" style="margin-top:0"><span>Clave de Groq</span>
-        <div class="input-wrap">
-          <input id="groqkey" data-k="groqKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="gsk_..." value="${esc(S.groqKey)}">
-          <button class="icon-btn" id="eye-groq" aria-label="Mostrar u ocultar clave">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
-        </div>
-      </label>
-      <label class="field"><span>Modelo de Groq</span>
-        <input data-k="groqModel" autocapitalize="off" spellcheck="false" value="${esc(S.groqModel)}">
-      </label>
-      <button class="btn secondary" id="test-groq" style="margin-top:14px">Probar Groq</button>
-      <div class="muted small" style="margin-top:12px">Gratis en console.groq.com → <b>API Keys</b>. Se usa para texto y recetas.</div>
+      </div>`}
     </div>
 
     <div class="section-label">Tus datos</div>
@@ -189,6 +193,18 @@ export function renderSettings() {
     </div>`}
 
     <div class="about">GymFit ${APP_VERSION}</div>`;
+}
+
+// Nombre de la pestaña, con ✓ si ya tiene clave
+function aiTabLabel(id) {
+  const S = state.settings, key = { gemini: S.geminiKey, claude: S.apiKey, groq: S.groqKey }[id];
+  return `${{ gemini: 'Gemini', claude: 'Claude', groq: 'Groq' }[id]}${key?.trim() ? ' <i>✓</i>' : ''}`;
+}
+// Qué IA se usa para cada cosa: fotos con Gemini o Claude; texto y recetas con Groq si tiene clave
+function aiSummary() {
+  const S = state.settings, photo = S.provider === 'claude' ? 'Claude' : 'Gemini';
+  const text = S.groqKey?.trim() ? 'Groq' : hasAiKey() ? photo : null;
+  return `📷 Fotos: <b>${hasAiKey() ? photo : 'falta la clave'}</b> · ✍️ Texto: <b>${text || 'falta la clave'}</b>`;
 }
 
 // ---------- Copia de seguridad ----------
@@ -278,22 +294,26 @@ const INFO = [
   ]],
   ['🍽️', 'Comidas', 'var(--pink)', [
     'Apunta lo que comes con una foto, describiéndolo por voz o texto, o con el código de barras.',
-    'Introducir a mano: elige platos y alimentos y ajusta las cantidades con − y +.',
+    'Introducir a mano: elige alimentos, platos o recetas y ajusta las cantidades con − y +.',
     'El anillo de calorías se pone verde, amarillo o rojo según lo cerca que estés de tu objetivo.',
   ]],
-  ['🥚', 'Alimentos', 'var(--yellow)', [
-    'Consulta los macros de cada alimento y guarda tus favoritos.',
+  ['🥚', 'Alimentos y platos', 'var(--yellow)', [
+    'Consulta los macros de cada alimento, añádelo a una comida y guarda tus favoritos.',
+    'Platos: lo que sueles comer. Guárdalos con ☆ al apuntar una comida y repítelos con un toque.',
+    'Convierte un plato en receta: la IA escribe los pasos.',
     'Añade tus propios alimentos o escanéalos, con su categoría y su ración.',
     'Busca productos de Mercadona, Consum, Lidl… en internet.',
   ]],
   ['📖', 'Recetas', 'var(--accent)', [
-    'Recetas listas para apuntar como comida con un toque.',
+    'Recetas con sus pasos y temporizadores: elige para cuántas personas y se ajustan las cantidades.',
     'Crea las tuyas a mano o con IA: escribe lo que te apetece o elige alimentos, con qué cocinar y cuánto tiempo tienes.',
     'Guarda las que más uses en ⭐ Mis recetas y elige en qué comidas te las propone.',
   ]],
   ['⚖️', 'Peso y actividad', 'var(--blue)', [
     'Apunta tu peso o lee la captura de Zepp Life y se rellena sola.',
-    'Pasos del día con su objetivo y el gasto de calorías estimado.',
+    'Toca o desliza el dedo por las gráficas para ver el valor de cada día.',
+    'Pasos del día con su objetivo y tu gasto de calorías del día (toca para ver de qué se compone).',
+    'Si quieres, apunta también el agua: actívalo en Ajustes.',
   ]],
   ['🔒', 'Tus datos', 'var(--muted)', [
     'Todo se guarda solo en este iPhone. Haz copias de seguridad desde Ajustes.',
@@ -326,21 +346,31 @@ function backupAgo() {
 }
 
 // ---------- Calcular objetivos (Mifflin-St Jeor + actividad + meta) ----------
-const ACTIVITY = [[1.2, 'Poca'], [1.375, 'Ligera'], [1.55, 'Media'], [1.725, 'Alta']];
+const ACTIVITY = [[1.2, 'Poca', 'Trabajo sentado y casi sin deporte'], [1.375, 'Ligera', 'Deporte 1-3 días por semana'],
+  [1.55, 'Media', 'Deporte 3-5 días por semana'], [1.725, 'Alta', 'Deporte 6-7 días o trabajo físico']];
 const GOALS = [['lose', 'Perder', -400], ['keep', 'Mantener', 0], ['gain', 'Ganar', 300]];
+const kc = v => Math.round(v).toLocaleString('es-ES');
 
+// Basal: el apuntado en Peso; si no hay, la fórmula de Mifflin-St Jeor. Mantenimiento = basal × actividad. Perder: −400 kcal, sin bajar del basal. Ganar: +300.
+// Proteína 2 g/kg (2,2 al perder) y grasa 0,9 g/kg; con sobrepeso se cuentan sobre el peso de un IMC de 27.
+// Los hidratos, lo que falta hasta las calorías.
 function calcGoals(c) {
-  const bmr = 10 * c.weight + 6.25 * c.height - 5 * c.age + (c.sex === 'm' ? -161 : 5);
-  const kcal = Math.round((bmr * c.act + GOALS.find(g => g[0] === c.goal)[2]) / 10) * 10;
-  const protein = Math.round(c.weight * (c.goal === 'lose' ? 2.2 : 2) / 5) * 5;
-  const fat = Math.round(c.weight * 0.9 / 5) * 5;
+  const bmr = c.bmr || mifflin(c, c.weight);
+  const keep = bmr * c.act, adj = GOALS.find(g => g[0] === c.goal)[2];
+  const target = Math.max(keep + adj, adj < 0 ? bmr : 0);
+  const kcal = Math.round(target / 10) * 10;
+  const kg = Math.min(c.weight, 27 * (c.height / 100) ** 2);
+  const protein = Math.round(kg * (c.goal === 'lose' ? 2.2 : 2) / 5) * 5;
+  const fat = Math.round(kg * 0.9 / 5) * 5;
   const carbs = Math.max(50, Math.round((kcal - protein * 4 - fat * 9) / 4 / 5) * 5);
-  return { kcal, protein, carbs, fat };
+  return { kcal, protein, carbs, fat, bmr, keep, adj: target - keep };
 }
 
-function openGoalCalc() {
+async function openGoalCalc() {
+  await refreshBodyWeight();
   const S = state.settings;
   const c = {
+    bmr: savedBmr(),
     sex: S.sex || 'h', age: S.age || '', height: S.height || '', weight: hasBodyWeight() ? Math.round(bodyKg() * 10) / 10 : '',
     act: S.activity || 1.55, goal: S.goal || 'keep',
   };
@@ -355,16 +385,20 @@ function openGoalCalc() {
     </div></div>
     <div class="label">Actividad</div>
     <div class="chips">${chips(ACTIVITY, c.act, 'data-act')}</div>
+    <div class="muted small calc-hint" id="act-hint"></div>
     <div class="label">Objetivo</div>
     <div class="chips">${chips(GOALS, c.goal, 'data-goal')}</div>
-    <div class="card" style="margin-top:14px"><div class="totals-row" id="calc-res"></div></div>
+    <div class="card" style="margin-top:14px"><div class="totals-row" id="calc-res"></div><div class="muted small calc-how" id="calc-how"></div></div>
     <button class="btn primary" id="apply" style="margin-top:16px" disabled>Aplicar</button>`, body => {
-    const res = body.querySelector('#calc-res'), apply = body.querySelector('#apply');
+    const res = body.querySelector('#calc-res'), how = body.querySelector('#calc-how'), apply = body.querySelector('#apply');
     let out = null;
     const paint = () => {
-      const ok = c.age > 0 && c.height > 0 && c.weight > 0;
+      const ok = (c.bmr || c.age > 0) && c.height > 0 && c.weight > 0;
       out = ok ? calcGoals(c) : null;
       apply.disabled = !ok;
+      body.querySelector('#act-hint').textContent = ACTIVITY.find(a => a[0] === c.act)?.[2] || '';
+      how.innerHTML = out ? `Basal <b>${kc(out.bmr)}</b>${c.bmr ? ' (de Peso)' : ''} × ${String(c.act).replace('.', ',')} = <b>${kc(out.keep)}</b> para mantener${
+        c.goal === 'keep' ? '' : ` · ${out.adj < 0 ? '−' : '+'}${kc(Math.abs(out.adj))} para ${c.goal === 'lose' ? 'perder' : 'ganar'}`}` : '';
       res.innerHTML = out ? `
         <div><b>${out.kcal}</b><span>kcal</span></div>
         <div><b class="p-c">${out.protein}g</b><span>proteína</span></div>
@@ -386,7 +420,8 @@ function openGoalCalc() {
         }
       }
       if (e.target.closest('#apply') && out) {
-        Object.assign(S, out, { sex: c.sex, age: c.age, height: c.height, activity: c.act, goal: c.goal });
+        const { bmr, keep, adj, ...goals } = out;
+        Object.assign(S, goals, { sex: c.sex, age: c.age, height: c.height, activity: c.act, goal: c.goal });
         saveSettings();
         closeSheet();
         renderSettings();

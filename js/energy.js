@@ -21,7 +21,13 @@ export async function refreshBodyWeight() {
   } catch { /* nada */ }
   return lastKg;
 }
-export const basalKcal = () => lastBmr;
+// Metabolismo basal: el de la báscula y, si no lo da, la fórmula de Mifflin-St Jeor con tus datos de Ajustes
+export function mifflin({ sex, age, height } = {}, kg) {
+  if (!(age > 0 && height > 0 && kg > 0)) return null;
+  return 10 * kg + 6.25 * height - 5 * age + (sex === 'm' ? -161 : 5);
+}
+export const basalKcal = () => lastBmr || (lastKg ? mifflin(state.settings, lastKg) : null);
+export const savedBmr = () => lastBmr;   // el apuntado en Peso (báscula o Zepp Life)
 export const bodyKg = () => lastKg || DEFAULT_KG;
 export const hasBodyWeight = () => !!lastKg;
 

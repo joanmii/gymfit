@@ -52,7 +52,8 @@ const DEFAULTS = {
   carbs: 230,
   fat: 70,
   stepsGoal: 8000,
-  waterGoal: 8,                     // vasos de agua al día (0 = no mostrar)
+  water: false,                     // apuntar el agua (se activa en Ajustes)
+  waterGoal: 8,                     // vasos de agua al día
   lastBackup: 0,                    // última copia de seguridad exportada
   firstRun: 0,                 // pasos al día (0 = sin objetivo)
   goalWeight: 0,                   // kg (0 = sin objetivo)

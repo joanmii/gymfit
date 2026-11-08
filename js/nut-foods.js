@@ -3,13 +3,15 @@
 // =========================================================
 import { db } from './db.js';
 import { openScanner, searchProducts, STORES } from './barcode.js';
-import { FOOD_CATS, FOODS } from './foods.js';
+import { FOOD_CATS, FOODS, norm } from './foods.js';
 import { chev } from './calendar.js';
 import { setSheetContent } from './sheet.js';
 import { cap, esc, haptic, r0, r1, saveSettings, state, toast } from './utils.js';
-import { favKey, freshBox, macroRow, mealScore, productToFood, scaleFood, scoreCard, TYPE, typesOf } from './nut-core.js';
-import { catChips, FAV_EMPTY, FOOD_EMOJIS, foodThumb, isFoodFav, listFoods, loadFoodFavs, loadMyFoods, myFoodsCache, toggleFoodFav } from './nut-favs.js';
+import { ALL_TYPES, defaultType, favKey, freshBox, ingList, inType, macroRow, MEAL_TYPES, mealScore, newDraft, productToFood, scaleFood, scoreCard, sumItems, TYPE, typeChips, typesOf } from './nut-core.js';
+import { catChips, FAV_EMPTY, FOOD_EMOJIS, foodThumb, isFoodFav, listFoods, loadFavorites, loadFoodFavs, loadMyFoods, myDishes, myFoodsCache, setDishTypes, toggleFoodFav } from './nut-favs.js';
 import { openAddMenu } from './nut-add.js';
+import { openReview } from './nut-review.js';
+import { convertToRecipe } from './nut-recipes.js';
 
 // ---------- Desplegable «Añadir alimento» (dentro de la revisión de la comida) ----------
 // Se pinta dentro de `el`. ctx: { onPick(item), onManual(), onScan() }
@@ -140,7 +142,7 @@ export function mountFoodPicker(el, ctx) {
 }
 
 // ---------- Lista de alimentos y platos: ficha completa de cada uno y crear platos ----------
-export const browserState = { q: '', cat: 'fav' };
+export const browserState = { q: '', cat: 'fav', tab: 'foods', dtype: 'all' };
 const infoRow = (f, attr, sub) => `
   <button class="food-row" ${attr}>
     ${f.items ? (f.photo ? `<img src="${esc(f.photo)}" alt="" loading="lazy">` : `<span class="e">${f.emoji || TYPE(typesOf(f)?.[0]).emoji}</span>`) : foodThumb(f)}
@@ -149,16 +151,34 @@ const infoRow = (f, attr, sub) => `
   </button>`;
 export function openFoodBrowser() {
   const st = browserState;
-  let foods = [], online = [];
+  const dishTab = st.tab === 'dishes';
+  let foods = [], online = [], dishes = [];
   setSheetContent(`
     <button class="link back" data-back>${chev('l')} Volver</button>
-    <h2 class="sheet-title">🍽️ Alimentos</h2>
-    <button class="btn primary" data-newfood>＋ Añadir alimento</button>
+    <h2 class="sheet-title">${dishTab ? '🍽️ Platos' : '🥕 Alimentos'}</h2>
+    <div class="seg wide" style="margin:6px 0 12px">
+      <button data-btab="foods" class="${dishTab ? '' : 'on'}">🥕 Alimentos</button>
+      <button data-btab="dishes" class="${dishTab ? 'on' : ''}">🍽️ Platos</button>
+    </div>
+    ${dishTab ? '<button class="btn primary" data-newdish>＋ Crear plato</button>' : '<button class="btn primary" data-newfood>＋ Añadir alimento</button>'}
     <input class="search" id="bq" type="search" enterkeyhint="search" autocomplete="off" style="margin-top:12px" aria-label="Buscar" value="${esc(st.q)}">
     <div data-blist></div>`, body => {
     const listEl = body.querySelector('[data-blist]');
 
-    const paint = () => {
+    // Mis platos: por tipo de comida y buscando por nombre o ingrediente
+    const paintDishes = () => {
+      const words = norm(st.q).split(/\s+/).filter(Boolean);
+      const all = myDishes();
+      dishes = all.filter(d => (st.dtype === 'all' || inType(d, st.dtype))
+        && words.every(w => norm(d.name).includes(w) || d.items.some(i => norm(i.name).includes(w))));
+      const chip = (id, label) => `<button class="chip ${st.dtype === id ? 'on' : ''}" data-dtype="${id}" style="--c:var(--accent)">${label}</button>`;
+      listEl.innerHTML = `
+        <div class="chips scroll">${chip('all', 'Todos')}${MEAL_TYPES.map(t => chip(t.id, `${t.emoji} ${t.name}`)).join('')}</div>
+        ${dishes.length
+          ? `<div class="food-list">${dishes.map((d, i) => infoRow(d, `data-di="${i}"`, `${r0(sumItems(d.items).kcal)} kcal · ${d.items.slice(0, 3).map(x => x.name).join(', ')}${d.items.length > 3 ? '…' : ''}`)).join('')}</div>`
+          : `<div class="card empty"><span class="e">🍽️</span><b>${all.length ? 'Sin resultados' : 'Aún no tienes platos'}</b>${all.length ? '' : '<div class="muted small">Guarda una comida con ☆ o crea uno.</div>'}</div>`}`;
+    };
+    const paintFoods = () => {
       const query = st.q.trim();
       foods = listFoods(st.cat, query, 60);
       listEl.innerHTML = `
@@ -168,13 +188,21 @@ export function openFoodBrowser() {
           || (!query && st.cat === 'fav' ? FAV_EMPTY : '<div class="muted small" style="text-align:center;margin:12px 0">No está en la lista.</div>')}</div>
         ${query.length >= 2 ? `<div data-web>${storeChips()}<button class="btn secondary" data-websearch style="margin-top:10px">🌐 Buscar «${esc(query)}» en internet</button></div>` : ''}`;
     };
+    const paint = () => (dishTab ? paintDishes() : paintFoods());
     paint();
-    Promise.all([loadFoodFavs(), loadMyFoods()]).then(() => { if (listEl.isConnected) paint(); });
+    Promise.all([loadFoodFavs(), loadMyFoods(), loadFavorites()]).then(() => { if (listEl.isConnected) paint(); });
 
     let tm;
     body.querySelector('#bq').addEventListener('input', e => { clearTimeout(tm); tm = setTimeout(() => { st.q = e.target.value; paint(); }, 120); });
     body.addEventListener('click', async e => {
       if (e.target.closest('[data-back]')) return openAddMenu(true);
+      const bt = e.target.closest('[data-btab]');
+      if (bt) { if (bt.dataset.btab !== st.tab) { st.tab = bt.dataset.btab; st.q = ''; openFoodBrowser(); } return; }
+      if (e.target.closest('[data-newdish]')) return openDishEditor();
+      const dtp = e.target.closest('[data-dtype]');
+      if (dtp) { st.dtype = dtp.dataset.dtype; haptic(); return paintDishes(); }
+      const di = e.target.closest('[data-di]');
+      if (di) return openDishDetail(dishes[Number(di.dataset.di)]);
       if (e.target.closest('[data-newfood]')) return openFoodEditor({ cat: st.cat === 'fav' ? 'lacteos' : st.cat });
       const c = e.target.closest('[data-cat]');
       if (c) { st.cat = c.dataset.cat; return paint(); }
@@ -201,6 +229,60 @@ export function openFoodBrowser() {
   });
 }
 
+// ---------- Mis platos: ficha y editor ----------
+export function openDishDetail(d) {
+  setSheetContent(`
+    <button class="link back" data-back>${chev('l')} Platos</button>
+    <div class="rc-hero">${d.photo ? `<img src="${d.photo}" alt="">` : `<span class="e">${d.emoji || TYPE(typesOf(d)?.[0]).emoji}</span>`}
+      <h2 class="sheet-title">${esc(d.name)}</h2>
+    </div>
+    <div class="card">${macroRow(sumItems(d.items))}</div>
+    <div class="label">Alimentos</div>
+    ${ingList(d.items)}
+    <div class="label">🏷️ Aparece en</div>
+    ${typeChips(t => inType(d, t), 'data-dt')}
+    <button class="btn primary" data-duse style="margin-top:18px">🍽️ Apuntar</button>
+    <button class="btn secondary" data-dconv>✨ Convertir en receta</button>
+    <button class="btn ghost" data-dedit>✏️ Editar</button>
+    <button class="btn ghost danger" data-ddel>Borrar plato</button>`, body => {
+    body.addEventListener('click', async e => {
+      if (e.target.closest('[data-back]')) return openFoodBrowser();
+      const dt = e.target.closest('[data-dt]');
+      if (dt) {
+        const ts = new Set(typesOf(d) || ALL_TYPES);
+        ts.has(dt.dataset.dt) ? ts.delete(dt.dataset.dt) : ts.add(dt.dataset.dt);
+        if (!ts.size) return toast('Déjalo al menos en una comida');
+        await setDishTypes(d, ALL_TYPES.filter(t => ts.has(t)));
+        await loadFavorites();
+        dt.classList.toggle('on', ts.has(dt.dataset.dt));
+        return haptic();
+      }
+      if (e.target.closest('[data-duse]')) {
+        return openReview(newDraft({ name: d.name, photo: d.photo || null, items: d.items.map(i => ({ ...i })) }), false, true);
+      }
+      if (e.target.closest('[data-dconv]')) return convertToRecipe(d);
+      if (e.target.closest('[data-dedit]')) return openDishEditor(d);
+      if (e.target.closest('[data-ddel]')) {
+        if (!confirm(`¿Borrar «${d.name}»?`)) return;
+        await db.deleteFavorite(d.id);
+        await loadFavorites();
+        toast('Plato borrado');
+        return openFoodBrowser();
+      }
+    });
+  });
+}
+
+export function openDishEditor(d = null) {
+  openReview({
+    ...newDraft(), mode: 'plato',
+    name: d?.name || '', photo: d?.photo || null, emoji: d?.emoji || null,
+    items: d ? d.items.map(i => ({ ...i })) : [],
+    types: (d && typesOf(d)) || (d ? ALL_TYPES : [defaultType()]),
+    ...(d ? { id: d.id, createdAt: d.createdAt } : {}),
+  }, !!d, true);
+}
+
 const nutriRow = (title, sub, m) => `
   <div class="portion-row"><div><b>${title}</b><small>${sub}</small></div>
     <span class="pk">${r0(m.kcal)} kcal</span>
@@ -217,6 +299,7 @@ function openFoodDetail(food) {
       <div><b>${esc(food.name)}</b><small>${r0(p.kcal)} kcal por 100 g</small></div>
     </div>
     <div class="emoji-grid" data-egrid hidden>${FOOD_EMOJIS.map(em => `<button data-em="${em}">${em}</button>`).join('')}</div>
+    <button class="btn primary" data-fuse style="margin-top:14px">🍽️ Añadir a una comida</button>
     <div class="label">Por 100 g</div>
     <div class="card">${macroRow(p)}</div>
     <div class="label">Raciones</div>
@@ -231,6 +314,14 @@ function openFoodDetail(food) {
     loadFoodFavs().then(() => { if (body.isConnected) paintFav(); });
     body.addEventListener('click', async e => {
       if (e.target.closest('[data-back]')) return openFoodBrowser();
+      // Elegir cuánto y abrir la comida nueva con ese alimento
+      if (e.target.closest('[data-fuse]')) {
+        setSheetContent('<div data-pbox></div>', b => mountPortion(b.querySelector('[data-pbox]'), food, {
+          backLabel: food.name, onBack: () => openFoodDetail(food),
+          onPick: item => openReview(newDraft({ name: food.name, items: [item] }), false, true),
+        }));
+        return haptic();
+      }
       if (e.target.closest('[data-emoji]')) { const g = body.querySelector('[data-egrid]'); g.hidden = !g.hidden; return haptic(); }
       const em = e.target.closest('[data-em]');
       if (em) {
@@ -337,7 +428,7 @@ export function mountPortion(el, food, ctx) {
 
   box.innerHTML = `
     <div class="sheet-title-row">
-      <button class="link back" data-pk="back" style="margin:0 0 0 -6px">${chev('l')} Volver a la lista</button>
+      <button class="link back" data-pk="back" style="margin:0 0 0 -6px">${chev('l')} ${esc(ctx.backLabel || 'Volver a la lista')}</button>
       <button class="icon-btn star" data-pk="fav" aria-label="Guardar en mis alimentos">☆</button>
     </div>
     <div class="food-hero">
@@ -387,7 +478,7 @@ export function mountPortion(el, food, ctx) {
 
   box.addEventListener('click', async e => {
     const act = e.target.closest('[data-pk]')?.dataset.pk;
-    if (act === 'back') return mountFoodPicker(el, ctx);
+    if (act === 'back') return ctx.onBack ? ctx.onBack() : mountFoodPicker(el, ctx);
     if (act === 'fav') {
       // La ración elegida pasa a ser la primera (la que se propone al usarlo)
       const chosen = sel >= 0 ? portions[sel] : ['ración', r0(grams)];

@@ -126,8 +126,7 @@ export function renderStats() {
       </div>
       <div>
         <div class="kpi-label">Días entrenados</div>
-        <div class="kpi-value" style="font-size:44px">${goal ? Math.min(100, Math.round(trained.length / goal * 100)) : 0}%</div>
-        ${trained.length >= goal && goal ? '<div class="kpi-sub" style="font-size:20px">🎉</div>' : ''}
+        <div class="kpi-value kpi-pct">${goal ? Math.min(100, Math.round(trained.length / goal * 100)) : 0}%${trained.length >= goal && goal ? '<span class="kpi-party">🎉</span>' : ''}</div>
       </div>
     </div>
 
