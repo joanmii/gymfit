@@ -287,6 +287,7 @@ const INFO = [
     'Pulsa Empezar entreno y marca cada serie con ✓: el descanso se cuenta solo.',
     'Ves lo que levantaste la última vez y tus récords.',
     'Entrenamiento libre con series libres y cardio en minutos.',
+    'Temporizador ⏱ en Rutinas: series, tiempo y descanso, con aviso sonoro en cada cambio.',
   ]],
   ['📊', 'Estadísticas', 'var(--purple)', [
     'Días entrenados, asistencia, rachas y grupos más trabajados.',

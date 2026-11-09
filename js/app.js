@@ -9,6 +9,7 @@ import { initStats, renderStats } from './stats.js';
 import { initNutrition, renderNutrition } from './nutrition.js';
 import { initSettings, renderSettings } from './settings.js';
 import { refreshBodyWeight } from './energy.js';
+import { openTimer } from './timer.js';
 
 const VIEWS = {
   calendar:  { init: initCalendar,  render: renderCalendar },
@@ -36,6 +37,7 @@ async function start() {
 
   document.querySelectorAll('.tab').forEach(btn =>
     btn.addEventListener('click', () => show(btn.dataset.tab)));
+  document.getElementById('fab-timer').addEventListener('click', openTimer);
 
   let first = 'calendar';
   try { first = localStorage.getItem(LAST_TAB) || 'calendar'; } catch { /* nada */ }
@@ -72,6 +74,7 @@ function show(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
   document.getElementById('fab').classList.toggle('hidden', name !== 'nutrition');
+  document.getElementById('fab-timer').classList.toggle('hidden', name !== 'routines');
   window.scrollTo(0, 0);
   VIEWS[name].render();
 }

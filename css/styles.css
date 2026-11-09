@@ -1083,3 +1083,19 @@ input.switch:checked::before { transform: translateX(20px); }
 /* Recetas: para cuántas personas */
 .rc-ppl { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px 10px 16px; font-size: 16px; font-weight: 600; }
 .rc-ppl .icon-btn:disabled { opacity: .35; }
+/* Temporizador de series */
+.tm-total { text-align: center; margin-top: 10px; }
+.tm-run { --c: var(--accent); text-align: center; }
+.tm-phase { font-family: var(--rounded); font-size: 22px; font-weight: 800; margin: 6px 0 14px; }
+.tm-ring { position: relative; width: min(72vw, 270px); margin: 0 auto; }
+.tm-ring svg { display: block; width: 100%; height: auto; transform: rotate(-90deg); }
+.tm-track { fill: none; stroke: var(--card2); stroke-width: 14; }
+.tm-prog { fill: none; stroke: var(--c); stroke-width: 14; stroke-linecap: round; transition: stroke-dashoffset .1s linear, stroke .3s; }
+.tm-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.tm-center b { font-family: var(--rounded); font-size: 64px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.tm-center span { margin-top: 6px; font-size: 15px; font-weight: 700; color: var(--c); text-transform: uppercase; letter-spacing: .04em; }
+.tm-run.paused .tm-center b { opacity: .45; }
+.tm-next { margin-top: 14px; }
+.tm-done { text-align: center; padding: 10px 0 0; }
+.tm-done .e { display: block; font-size: 56px; line-height: 1.1; margin-bottom: 6px; }
+#view-routines, #view-nutrition { padding-bottom: calc(var(--tabh) + var(--safe-b) + 90px); }

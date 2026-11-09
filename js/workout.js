@@ -366,16 +366,18 @@ let audio = null;
 export function unlockAudio() {   // iPhone solo deja sonar audio creado tras tocar la pantalla
   try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume?.(); } catch { /* sin audio */ }
 }
-export function beep() {
+export function beep() { tones([[880, 0, 0.18], [880, 0.22, 0.18]]); }
+// Varios pitidos: [[frecuencia, inicio, duración], …] en segundos
+export function tones(list, vol = 0.25) {
   if (!audio) return;
   try {
-    [0, 0.22].forEach(t => {
+    list.forEach(([f, t, d]) => {
       const o = audio.createOscillator(), g = audio.createGain();
-      o.frequency.value = 880;
-      g.gain.setValueAtTime(0.25, audio.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + t + 0.18);
+      o.frequency.value = f;
+      g.gain.setValueAtTime(vol, audio.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + t + d);
       o.connect(g).connect(audio.destination);
-      o.start(audio.currentTime + t); o.stop(audio.currentTime + t + 0.2);
+      o.start(audio.currentTime + t); o.stop(audio.currentTime + t + d + 0.02);
     });
   } catch { /* sin audio */ }
 }
