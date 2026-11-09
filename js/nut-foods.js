@@ -18,7 +18,8 @@ import { convertToRecipe } from './nut-recipes.js';
 export const pickerState = { q: '', cat: 'fav' };
 
 const portionText = f => {
-  const [label, g] = f.portions[0] || ['100 g', 100];
+  if (!f.per100) return '';
+  const [label, g] = f.portions?.[0] || ['100 g', 100];
   return `${label === '100 g' ? '100 g' : `1 ${label} (${r0(g)} g)`} · ${r0(f.per100.kcal * g / 100)} kcal`;
 };
 const starSpan = f => {
@@ -28,7 +29,7 @@ const starSpan = f => {
 const foodRow = (f, attr) => `
   <button class="food-row" ${attr}>
     ${foodThumb(f)}
-    <span class="n">${esc(f.name)}${f.store ? `<small>${esc(f.store)}</small>` : ''}</span>
+    <span class="n">${esc(f.name)}<small>${esc([f.store, portionText(f)].filter(Boolean).join(' · '))}</small></span>
     ${starSpan(f)}
     <span class="plus">+</span>
   </button>`;
@@ -120,7 +121,7 @@ export function mountFoodPicker(el, ctx) {
       if (!f) return;
       await toggleFoodFav(f);
       haptic();
-      return refreshStars();
+      return st.q.trim() ? refreshStars() : paint();   // en una categoría, los favoritos suben arriba
     }
     const fi = e.target.closest('[data-fi]');
     if (fi) return mountPortion(el, shown[Number(fi.dataset.fi)], ctx);
@@ -143,11 +144,11 @@ export function mountFoodPicker(el, ctx) {
 
 // ---------- Lista de alimentos y platos: ficha completa de cada uno y crear platos ----------
 export const browserState = { q: '', cat: 'fav', tab: 'foods', dtype: 'all' };
-const infoRow = (f, attr, sub) => `
+const infoRow = (f, attr, sub, star = false) => `
   <button class="food-row" ${attr}>
     ${f.items ? (f.photo ? `<img src="${esc(f.photo)}" alt="" loading="lazy">` : `<span class="e">${f.emoji || TYPE(typesOf(f)?.[0]).emoji}</span>`) : foodThumb(f)}
     <span class="n">${esc(f.name)}${sub ? `<small>${esc(sub)}</small>` : ''}</span>
-    ${chev('r')}
+    ${star ? starSpan(f) : ''}${chev('r')}
   </button>`;
 export function openFoodBrowser() {
   const st = browserState;
@@ -184,7 +185,7 @@ export function openFoodBrowser() {
       listEl.innerHTML = `
         <div class="label">📋 ${query ? 'Resultados' : 'Alimentos'}</div>
         ${query ? '' : `<div class="chips scroll">${catChips(st.cat)}</div>`}
-        <div class="food-list">${foods.map((f, i) => infoRow(f, `data-fi="${i}"`, '')).join('')
+        <div class="food-list">${foods.map((f, i) => infoRow(f, `data-fi="${i}"`, portionText(f), true)).join('')
           || (!query && st.cat === 'fav' ? FAV_EMPTY : '<div class="muted small" style="text-align:center;margin:12px 0">No está en la lista.</div>')}</div>
         ${query.length >= 2 ? `<div data-web>${storeChips()}<button class="btn secondary" data-websearch style="margin-top:10px">🌐 Buscar «${esc(query)}» en internet</button></div>` : ''}`;
     };
@@ -207,6 +208,12 @@ export function openFoodBrowser() {
       const c = e.target.closest('[data-cat]');
       if (c) { st.cat = c.dataset.cat; return paint(); }
       const pick = (attr, arr) => { const b = e.target.closest(`[${attr}]`); return b ? arr[Number(b.getAttribute(attr))] : null; };
+      // ☆ en la lista: a favoritos (y sube arriba en su categoría)
+      if (e.target.closest('[data-star]') && pick('data-fi', foods)) {
+        await toggleFoodFav(pick('data-fi', foods));
+        haptic();
+        return paintFoods();
+      }
       const food = pick('data-fi', foods) || pick('data-on', online);
       if (food) return openFoodDetail(food);
       const so = e.target.closest('[data-store]');
@@ -292,16 +299,18 @@ function openFoodDetail(food) {
   const p = food.per100;
   const portions = [...(food.portions || [])];
   if (!portions.some(([, g]) => g === 100)) portions.push(['100 g', 100]);
+  const [ul, ug] = portions[0];   // la ración principal: 1 bocata, 1 vaso, 1 unidad…
+  const unitName = ul === '100 g' ? '100 g' : `1 ${ul} (${r0(ug)} g)`;
   setSheetContent(`
     <button class="link back" data-back>${chev('l')} Alimentos</button>
     <div class="food-hero">
       <button class="fh-emoji" data-emoji aria-label="Cambiar emoji">${foodThumb(food)}</button>
-      <div><b>${esc(food.name)}</b><small>${r0(p.kcal)} kcal por 100 g</small></div>
+      <div><b>${esc(food.name)}</b><small>${esc(unitName)} · ${r0(p.kcal * ug / 100)} kcal</small></div>
     </div>
     <div class="emoji-grid" data-egrid hidden>${FOOD_EMOJIS.map(em => `<button data-em="${em}">${em}</button>`).join('')}</div>
     <button class="btn primary" data-fuse style="margin-top:14px">🍽️ Añadir a una comida</button>
-    <div class="label">Por 100 g</div>
-    <div class="card">${macroRow(p)}</div>
+    <div class="label">${ul === '100 g' ? 'Por 100 g' : `Por ${esc(ul)} (${r0(ug)} g)`}</div>
+    <div class="card">${macroRow(scaleFood(food, ug))}</div>
     <div class="label">Raciones</div>
     <div class="card portion-list">${portions.map(([l, g]) => nutriRow(l === '100 g' ? '100 g' : `1 ${esc(l)}`, `${r0(g)} g`, scaleFood(food, g))).join('')}</div>
     <div class="label">Puntuación</div>

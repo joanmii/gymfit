@@ -157,7 +157,7 @@ export async function renderNutrition() {
         </div>
         ${waterRow(water)}
       </div>
-      ${gastoNote(tot.kcal, kSteps, kGym)}
+      ${gastoNote(tot.kcal, kSteps, kGym, day)}
     </div>
 
     ${!isToday ? `<button class="btn secondary" data-today style="margin-bottom:6px">Volver a hoy</button>` : ''}
@@ -204,10 +204,13 @@ const modeSeg = () => `
     <button data-nmode="peso" class="${mode === 'peso' ? 'on' : ''}">⚖️ Peso</button>
   </div>`;
 
-// Gasto del día: metabolismo basal (el día entero) + digestión (~10 % de lo comido) + pasos + entreno
-function gastoNote(eaten, kSteps, kGym) {
-  const bmr = basalKcal();
-  if (!bmr) return '';
+// Gasto del día: metabolismo basal + digestión (~10 % de lo comido) + pasos + entreno.
+// El basal se va sumando según avanza el día (hoy, según la hora; los días pasados, entero).
+function gastoNote(eaten, kSteps, kGym, d) {
+  const full = basalKcal();
+  if (!full) return '';
+  const t = today(), frac = +d < +t ? 1 : +d > +t ? 0 : Math.min(1, (Date.now() - +t) / 86400000);
+  const bmr = full * frac;
   const tef = eaten * 0.1, n = v => r0(v).toLocaleString('es-ES');
   const parts = [['Metabolismo basal', bmr], ['Digestión', tef], ['Pasos', kSteps], ['Entreno', kGym]].filter(([, v]) => v >= 1);
   return `<details class="act-note gasto">

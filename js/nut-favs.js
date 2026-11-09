@@ -87,7 +87,12 @@ export const catChips = cur => FOOD_CATS_ALL.map(c => `<button class="chip ${c.i
 // Alimentos de una categoría, o de una búsqueda (con tus favoritos primero)
 export function listFoods(cat, query, limit) {
   const q = query.trim();
-  if (!q) return cat === 'fav' ? foodFavCache : [...myFoodsCache.filter(f => f.cat === cat), ...foodsByCat(cat)];
+  if (!q) {
+    if (cat === 'fav') return foodFavCache;
+    // En cada categoría, primero tus favoritos (★) y luego el resto
+    const all = [...myFoodsCache.filter(f => f.cat === cat), ...foodsByCat(cat)];
+    return [...all.filter(f => isFoodFav(f.name)), ...all.filter(f => !isFoodFav(f.name))];
+  }
   const words = norm(q).split(/\s+/).filter(Boolean);
   const match = f => words.every(w => norm(f.name).includes(w));
   const first = [...foodFavCache.filter(match), ...myFoodsCache.filter(match)];
