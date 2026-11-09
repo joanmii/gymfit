@@ -39,8 +39,8 @@ export function openTimer() {
       <div class="stepper"><button class="icon-btn" data-tv="${k}" data-d="-1" aria-label="Menos">−</button><b data-tvv="${k}">${show(k, c[k])}</b><button class="icon-btn" data-tv="${k}" data-d="1" aria-label="Más">+</button></div></div>`;
   openSheet(`
     <h2 class="sheet-title">⏱️ Temporizador</h2>
-    <div class="card rc-meta tm-set">${row('sets', 'Series')}${row('work', 'Cada serie')}${row('rest', 'Descanso')}</div>
-    <div class="muted small tm-total" data-ttot>Total ${mmss(total(c))}</div>
+    <div class="card rc-meta tm-set">${row('sets', 'Series')}${row('work', 'Tiempo')}${row('rest', 'Descanso')}</div>
+    <div class="tm-total" data-ttot>${mmss(total(c))}</div>
     <button class="btn primary" data-tstart style="margin-top:16px">▶︎ Empezar</button>`, body => {
     body.addEventListener('click', e => {
       const b = e.target.closest('[data-tv]');
@@ -48,7 +48,7 @@ export function openTimer() {
         const k = b.dataset.tv, d = Number(b.dataset.d), [lo, hi] = LIMITS[k];
         c[k] = Math.min(hi, Math.max(lo, c[k] + d * step(k, c[k], d)));
         body.querySelector(`[data-tvv="${k}"]`).textContent = show(k, c[k]);
-        body.querySelector('[data-ttot]').textContent = `Total ${mmss(total(c))}`;
+        body.querySelector('[data-ttot]').textContent = mmss(total(c));
         state.settings.timer = { ...c };
         saveSettings();
         return haptic();
@@ -75,10 +75,11 @@ function run(c) {
           <circle cx="110" cy="110" r="${R}" class="tm-prog" data-tprog stroke-dasharray="${C}" stroke-dashoffset="0"/></svg>
         <div class="tm-center"><b data-tleft></b><span data-tkind></span></div>
       </div>
-      <div class="muted small tm-next" data-tnext></div>
-      <div class="rc-actions" style="margin-top:18px">
-        <button class="btn secondary" data-tpause>⏸ Pausa</button>
-        <button class="btn ghost danger" data-tstop>Parar</button>
+      <div class="tm-next" data-tnext></div>
+      <button class="btn secondary" data-tpause style="margin-top:18px">⏸ Pausa</button>
+      <div class="rc-actions" data-tpaused hidden style="margin-top:18px">
+        <button class="btn primary" data-tresume>▶︎ Seguir</button>
+        <button class="btn secondary danger" data-tstop>Parar</button>
       </div>
     </div>`, body => {
     const $ = s => body.querySelector(s);
@@ -86,11 +87,12 @@ function run(c) {
       const p = phases[idx], secs = Math.max(0, Math.ceil(leftMs / 1000));
       $('[data-trun]').style.setProperty('--c', COLOR[p.kind]);
       $('[data-tset]').textContent = p.kind === 'ready' ? 'Prepárate' : `Serie ${p.set} de ${c.sets}`;
-      $('[data-tkind]').textContent = p.kind === 'ready' ? 'empieza en' : p.kind === 'work' ? 'Serie' : 'Descanso';
+      $('[data-tkind]').textContent = p.kind === 'ready' ? 'empieza en' : '';   // serie (verde) o descanso (azul): se ve por el color
       $('[data-tleft]').textContent = p.kind === 'ready' ? String(secs) : mmss(secs);
       $('[data-tprog]').setAttribute('stroke-dashoffset', String(C * (1 - Math.min(1, leftMs / (p.dur * 1000)))));
-      const n = phases[idx + 1];
-      $('[data-tnext]').textContent = n ? `Luego: ${n.kind === 'work' ? `serie ${n.set}` : 'descanso'} · ${mmss(n.dur)}` : 'Último tramo';
+      // Series hechas / total y el tiempo que llevas
+      const done = phases.slice(1, idx).reduce((a, x) => a + x.dur, 0) + (p.kind === 'ready' ? 0 : p.dur - leftMs / 1000);
+      $('[data-tnext]').textContent = `${p.set || 1}/${c.sets} · ${mmss(Math.max(0, Math.floor(done)))}`;
     };
     const finish = () => {
       clearInterval(timer);
@@ -135,11 +137,13 @@ function run(c) {
     tick();
 
     body.addEventListener('click', e => {
-      const pb = e.target.closest('[data-tpause]');
+      const pb = e.target.closest('[data-tpause], [data-tresume]');
       if (pb) {
-        if (paused == null) { paused = end - Date.now(); pb.textContent = '▶︎ Seguir'; keepAwake(false); }
-        else { end = Date.now() + paused; paused = null; pb.textContent = '⏸ Pausa'; unlockAudio(); keepAwake(true); }
+        if (paused == null) { paused = end - Date.now(); keepAwake(false); }
+        else { end = Date.now() + paused; paused = null; unlockAudio(); keepAwake(true); }
         $('[data-trun]').classList.toggle('paused', paused != null);
+        $('[data-tpause]').hidden = paused != null;
+        $('[data-tpaused]').hidden = paused == null;
         return haptic();
       }
       if (e.target.closest('[data-tstop]')) { clearInterval(timer); keepAwake(false); return openTimer(); }

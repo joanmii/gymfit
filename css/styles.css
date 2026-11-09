@@ -1084,7 +1084,7 @@ input.switch:checked::before { transform: translateX(20px); }
 .rc-ppl { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px 10px 16px; font-size: 16px; font-weight: 600; }
 .rc-ppl .icon-btn:disabled { opacity: .35; }
 /* Temporizador de series */
-.tm-total { text-align: center; margin-top: 10px; }
+.tm-total { text-align: center; margin-top: 12px; font-family: var(--rounded); font-size: 22px; font-weight: 800; }
 .tm-run { --c: var(--accent); text-align: center; }
 .tm-phase { font-family: var(--rounded); font-size: 22px; font-weight: 800; margin: 6px 0 14px; }
 .tm-ring { position: relative; width: min(72vw, 270px); margin: 0 auto; }
@@ -1095,7 +1095,9 @@ input.switch:checked::before { transform: translateX(20px); }
 .tm-center b { font-family: var(--rounded); font-size: 64px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .tm-center span { margin-top: 6px; font-size: 15px; font-weight: 700; color: var(--c); text-transform: uppercase; letter-spacing: .04em; }
 .tm-run.paused .tm-center b { opacity: .45; }
-.tm-next { margin-top: 14px; }
+.tm-next { margin-top: 14px; font-family: var(--rounded); font-size: 19px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.tm-center span:empty { display: none; }
 .tm-done { text-align: center; padding: 10px 0 0; }
 .tm-done .e { display: block; font-size: 56px; line-height: 1.1; margin-bottom: 6px; }
 #view-routines, #view-nutrition { padding-bottom: calc(var(--tabh) + var(--safe-b) + 90px); }
+#fab-timer svg { width: 32px; height: 32px; }
