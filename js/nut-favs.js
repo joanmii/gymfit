@@ -65,7 +65,8 @@ export async function loadFoodFavs() {
 const findFoodFav = name => { const k = favKey(name); return k ? foodFavCache.find(f => favKey(f.name) === k) : null; };
 
 export const isFoodFav = name => !!findFoodFav(name);
-// 0 = no es favorito (☆), 1 = favorito (estrella blanca), 2 = favorito favorito (estrella amarilla)
+// 0 = nada (☆) · 1 = estrella blanca: sube arriba en su categoría (solo para ordenar)
+// 2 = estrella amarilla: favorito de verdad, sale en la pestaña ⭐ Favoritos (y arriba en su categoría)
 export const favLevel = name => { const f = findFoodFav(name); return !f ? 0 : f.top ? 2 : 1; };
 const byLevel = list => [2, 1, 0].flatMap(l => list.filter(f => favLevel(f.name) === l));
 
@@ -77,30 +78,40 @@ const newFoodFav = (food, top) => ({
   top, createdAt: Date.now(),
 });
 
-// Toque en ☆: lo guarda como favorito (estrella blanca), o lo quita si ya lo era
+// Toque en la estrella de la lista: ☆ → blanca; blanca o amarilla → se quita
 export async function toggleFoodFav(food) {
   const old = findFoodFav(food.name);
   if (old) await db.deleteFoodFav(old.id);
   else await db.putFoodFav(newFoodFav(food, false));
   await loadFoodFavs();
-  toast(old ? 'Quitado de favoritos' : 'Guardado en favoritos ☆');
+  toast(old ? 'Estrella quitada' : 'Arriba en su categoría');
   return !old;
 }
 
-// Mantener pulsada la estrella: favorito favorito (amarilla); si ya lo era, vuelve a favorito normal
+// Mantener pulsada la estrella de la lista: amarilla (a ⭐ Favoritos); si ya lo era, vuelve a blanca
 export async function toggleTopFav(food) {
   const old = findFoodFav(food.name);
   const top = !old?.top;
   await db.putFoodFav(old ? { ...old, top } : newFoodFav(food, true));
   await loadFoodFavs();
-  toast(top ? 'Favorito favorito ⭐' : 'Ahora es favorito normal');
+  toast(top ? 'En favoritos ⭐' : 'Fuera de favoritos · sigue arriba en su categoría');
   return top;
+}
+
+// Estrella de la ficha del alimento: amarilla, o quitarla del todo si ya lo era
+export async function toggleFichaFav(food) {
+  const old = findFoodFav(food.name);
+  if (old?.top) await db.deleteFoodFav(old.id);
+  else await db.putFoodFav(old ? { ...old, top: true } : newFoodFav(food, true));
+  await loadFoodFavs();
+  toast(old?.top ? 'Quitado de favoritos' : 'En favoritos ⭐');
+  return !old?.top;
 }
 
 // Estrella de una fila según el nivel
 export function starSpan(f) {
   const l = favLevel(f.name);
-  const label = ['Guardar en favoritos (mantén pulsado: favorito favorito)', 'Favorito (toca para quitar, mantén para favorito favorito)', 'Favorito favorito (toca para quitar)'][l];
+  const label = ['Toca: arriba en su categoría · mantén pulsado: a favoritos', 'Arriba en su categoría (toca para quitar, mantén pulsado: a favoritos)', 'En favoritos (toca para quitar)'][l];
   return `<span class="fstar lv${l}" data-star role="button" aria-label="${label}">${l ? '★' : '☆'}</span>`;
 }
 
@@ -134,7 +145,7 @@ const catFoods = cat => [...myFoodsCache.filter(f => f.cat === cat), ...foodsByC
 // Segunda fila de chips: subcategorías de la categoría, o en ⭐ Favoritos los tipos de alimento que tienes
 export function subChips(cat, cur) {
   const subs = cat === 'fav'
-    ? FOOD_CATS.filter(c => foodFavCache.some(f => favCat(f) === c.id))
+    ? FOOD_CATS.filter(c => foodFavCache.some(f => f.top && favCat(f) === c.id))
     : subcatsIn(cat, catFoods(cat));
   if (cat === 'fav' && subs.length < 2) return '';
   if (!subs.length) return '';
@@ -147,7 +158,7 @@ export function subChips(cat, cur) {
 export function listFoods(cat, query, limit, sub = 'all') {
   const q = query.trim();
   if (!q) {
-    if (cat === 'fav') return byLevel(foodFavCache.filter(f => sub === 'all' || favCat(f) === sub));
+    if (cat === 'fav') return foodFavCache.filter(f => f.top && (sub === 'all' || favCat(f) === sub));   // solo las amarillas
     return byLevel(catFoods(cat).filter(f => sub === 'all' || subOf(f) === sub));
   }
   const words = norm(q).split(/\s+/).filter(Boolean);
@@ -164,7 +175,7 @@ export async function loadMyFoods() {
   myFoodsCache = (await db.allMyFoods()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
   return myFoodsCache;
 }
-export const FAV_EMPTY = '<div class="hint-card">Aún no tienes favoritos. Toca <b>☆</b> en cualquier alimento para guardarlo; mantenla pulsada para que sea favorito favorito (<b style="color:#ffd60a">★</b>) y salga el primero.</div>';
+export const FAV_EMPTY = '<div class="hint-card">Aún no tienes favoritos. <b>Mantén pulsada</b> la ☆ de un alimento (o pulsa la estrella de su ficha) para que se ponga <b style="color:#ffd60a">★</b> y salga aquí. Un toque la pone blanca: solo lo sube arriba en su categoría.</div>';
 
 // ---------- Emoji de los alimentos (se puede cambiar tocándolo en su ficha) ----------
 export const FOOD_EMOJIS = ['🥚', '🍳', '🥛', '🧀', '🧈', '🥩', '🍗', '🍖', '🥓', '🌭', '🍔', '🍟', '🍕', '🥪', '🌮', '🌯', '🥙', '🥗', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🍤', '🍙', '🍚', '🥘', '🥫', '🍞', '🥐', '🥖', '🥨', '🥯', '🧇', '🥞', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🫘', '🥜', '🌰', '🐟', '🦐', '🦑', '🥣', '🥤', '🧃', '☕', '🍵', '🍫', '🍪', '🍩', '🍰', '🧁', '🍦', '🍯', '🫒', '🍺', '🍷', '💪'];

@@ -7,7 +7,7 @@ import { openSheet, setSheetContent, closeSheet } from './sheet.js';
 import { bodyMap, setMapSelection, PARTS, partColor } from './bodymap.js';
 import { EXERCISES, EX, EQUIPMENT, TEMPLATES, videoUrl, isCardio, variantChips, variantsOf } from './exercises.js';
 import { startWorkout, openWorkout, getActive, progressBlock } from './workout.js';
-import { GEN_GROUPS, PRESETS, generateRoutine, swapExercise, estimateMinutes, routineName } from './generator.js';
+import { GEN_GROUPS, PRESETS, generateRoutine, swapExercise, estimateMinutes, routineName, templateFor } from './generator.js';
 import { state, MUSCLES, M, esc, toast, haptic } from './utils.js';
 import { mountAnim, hasAnim } from './anim.js';
 
@@ -18,6 +18,9 @@ const exMuscles = e => (e?.cardio ? 'Cardio' : (e?.p || []).map(p => PARTS[p].na
 
 let root;
 let tab = 'routines';                           // 'routines' | 'library'
+const TPL_KEY = 'gymfit-tplmin';
+let tplMin = 0;                                 // minutos para adaptar las plantillas (0 = como vienen)
+try { tplMin = Number(localStorage.getItem(TPL_KEY)) || 0; } catch { /* nada */ }
 const libFilter = { muscle: null, eq: null, q: '' };   // filtros de la pestaña Ejercicios
 const pickFilter = { muscle: null, eq: null, q: '' };  // filtros al añadir a una rutina
 
@@ -34,10 +37,17 @@ export function initRoutines(el) {
     if (r) return openEditor(state.routines.find(x => x.id === Number(r.dataset.routine)));
     if (e.target.closest('#new-routine')) return openEditor();
     if (e.target.closest('#gen-routine')) return openGenerator();
+    const tm = e.target.closest('[data-tplmin]');
+    if (tm) {
+      tplMin = Number(tm.dataset.tplmin);
+      try { localStorage.setItem(TPL_KEY, String(tplMin)); } catch { /* nada */ }
+      haptic();
+      return renderRoutines();
+    }
     const tp = e.target.closest('[data-template]');
     if (tp) {
       const tpl = TEMPLATES[Number(tp.dataset.template)];
-      return openEditor({ name: tpl.name, items: tpl.items.map(([ex, sets, reps]) => ({ ex, sets, reps, kg: '' })) });
+      return openEditor({ name: tplMin ? `${tpl.name} · ${tplMin} min` : tpl.name, items: templateFor(tpl, tplMin) });
     }
   });
 }
@@ -104,7 +114,7 @@ function routinesHtml() {
   const cards = list.map(r => {
     const groups = routineGroups(r);
     return `<div class="card routine" data-routine="${r.id}" role="button" tabindex="0">
-      <div class="routine-top"><b>${esc(r.name)}</b><span class="rt-dots">${groups.map(g => `<i style="--c:${M[g].color}" title="${M[g].name}"></i>`).join('')}</span>${chev('r')}</div>
+      <div class="routine-top"><b>${esc(r.name)}${r.items.length ? `<small class="rt-min">${estimateMinutes(r.items)} min</small>` : ''}</b><span class="rt-dots">${groups.map(g => `<i style="--c:${M[g].color}" title="${M[g].name}"></i>`).join('')}</span>${chev('r')}</div>
       ${r.items.length ? `<button class="btn small primary start" data-start="${r.id}">▶ Empezar entreno</button>` : ''}
     </div>`;
   }).join('');
@@ -116,10 +126,13 @@ function routinesHtml() {
     <button class="btn primary" id="new-routine">+ Nueva rutina</button>
     <button class="btn tint" id="free-workout">⚡ Entrenamiento libre</button>
     <div class="section-label">Plantillas</div>
+    <div class="chips scroll tpl-min">
+      ${[0, ...DURATIONS].map(m => `<button class="chip ${tplMin === m ? 'on' : ''}" data-tplmin="${m}" style="--c:var(--accent)">${m ? `${m} min` : 'Todas'}</button>`).join('')}
+    </div>
     <div class="action-list">
       ${TEMPLATES.map((t, i) => `<button class="action" data-template="${i}" style="--c:color-mix(in srgb,var(--accent) 22%,transparent)">
         <span class="e">${t.emoji || '📋'}</span>
-        <div>${esc(t.name)}<small>${t.items.length} ejercicios</small></div>
+        <div>${esc(t.name)}<small>${estimateMinutes(templateFor(t, tplMin))} min</small></div>
       </button>`).join('')}
     </div>`;
 }
@@ -145,7 +158,8 @@ function exRow(e, f, pick) {
   </button>`;
 }
 
-export function mountLibrary(el, f, onPick, pick = false) {
+// pick: modo «añadir» (rutina o entreno): el + añade (onPick) y tocar el ejercicio abre su ficha (onInfo)
+export function mountLibrary(el, f, onPick, pick = false, onInfo = null) {
   el.insertAdjacentHTML('beforeend', `
     <div class="card bm-card">
       ${bodyMap({ interactive: true, selected: f.muscle })}
@@ -207,7 +221,9 @@ export function mountLibrary(el, f, onPick, pick = false) {
       return draw();
     }
     const ex = e.target.closest('[data-ex]');
-    if (ex) onPick(ex.dataset.ex);
+    if (!ex) return;
+    if (pick && onInfo && !e.target.closest('.ex-add')) return onInfo(ex.dataset.ex);
+    onPick(ex.dataset.ex);
   });
   el.querySelector('.search').addEventListener('input', e => { f.q = e.target.value; draw(); });
   draw();
@@ -222,7 +238,8 @@ function openExercise(id) { showExercise(id); }
 
 // back: si se abre desde una rutina o un entreno, botón para volver a donde estabas
 // replace: cambiar de variante sin volver a abrir la hoja
-export function showExercise(id, back = null, replace = false) {
+// add: { label, fn(id) } botón para añadir el ejercicio a la rutina o al entreno desde su ficha
+export function showExercise(id, back = null, replace = false, add = null) {
   const ex = EX[id];
   if (!ex) return;
   const prog = progressBlock(id);
@@ -245,14 +262,15 @@ export function showExercise(id, back = null, replace = false) {
     ${ex.tips ? `<div class="tip-card"><span class="e">💡</span><div><b>Consejo</b><p>${esc(ex.tips)}</p></div></div>` : ''}
     ${hasAnim(id) ? '<div class="card ex-anim" id="ex-anim"></div>' : ''}
     ${ex.cardio ? '' : `<a class="link" href="${videoUrl(ex)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:12px">¿Más dudas? Ver vídeos en YouTube</a>`}
-    ${back ? '' : '<button class="btn primary" id="add-to" style="margin-top:14px">Añadir a una rutina</button>'}`, body => {
+    ${add ? `<button class="btn primary" id="add-this" style="margin-top:14px">${esc(add.label)}</button>` : back ? '' : '<button class="btn primary" id="add-to" style="margin-top:14px">Añadir a una rutina</button>'}`, body => {
     const anim = body.querySelector('#ex-anim');
     if (anim) mountAnim(anim, id);
     body.querySelector('#add-to')?.addEventListener('click', () => chooseRoutine(id));
+    body.querySelector('#add-this')?.addEventListener('click', () => add.fn(id));
     body.querySelector('#ex-back')?.addEventListener('click', back);
     body.querySelector('.variants')?.addEventListener('click', e => {
       const v = e.target.closest('[data-variant]')?.dataset.variant;
-      if (v && v !== id) { haptic(); showExercise(v, back, true); }
+      if (v && v !== id) { haptic(); showExercise(v, back, true, add); }
     });
   });
 }
@@ -377,12 +395,13 @@ function openEditor(existing) {
     <button class="link back" id="back">${chev('l')} Volver a la rutina</button>
     <h2 class="sheet-title">Añadir ejercicio</h2>`, body => {
     body.querySelector('#back').addEventListener('click', () => setSheetContent(editorHtml(), mountEditor));
-    mountLibrary(body, pickFilter, exId => {
-      draft.items.push({ ex: exId, sets: 3, reps: '10', kg: '' });
+    const addEx = exId => {
+      draft.items.push(isCardio(exId) ? { ex: exId, sets: 1, reps: '20', kg: '' } : { ex: exId, sets: 3, reps: '10', kg: '' });
       haptic();
       toast(`Añadido: ${EX[exId].name}`);
       setSheetContent(editorHtml(), mountEditor);
-    }, true);
+    };
+    mountLibrary(body, pickFilter, addEx, true, exId => showExercise(exId, openPicker, false, { label: '＋ Añadir a la rutina', fn: addEx }));
   });
 
   openSheet(editorHtml(), mountEditor);
@@ -390,7 +409,8 @@ function openEditor(existing) {
 
 // ---------- Creador automático de rutinas ----------
 const GEN_KEY = 'gymfit-gen';
-const DURATIONS = [30, 45, 60, 75, 90];
+const DURATIONS = [30, 45, 60, 75, 90, 120];
+const GEN_EQS = Object.keys(EQUIPMENT).filter(id => id !== 'cardio');
 function loadGenOpts() {
   const def = { minutes: 60, groups: ['pecho', 'triceps'], eqs: Object.keys(EQUIPMENT) };
   try { return { ...def, ...JSON.parse(localStorage.getItem(GEN_KEY) || '{}') }; } catch { return def; }
@@ -418,6 +438,7 @@ function openGenerator() {
 
     <div class="label">Material disponible</div>
     <div class="chips">
+      <button class="chip ${GEN_EQS.every(q => opts.eqs.has(q)) ? 'on' : ''}" data-geq-all style="--c:var(--blue)">Todo</button>
       ${Object.entries(EQUIPMENT).filter(([id]) => id !== 'cardio').map(([id, name]) => `<button class="chip ${opts.eqs.has(id) ? 'on' : ''}" data-geq="${id}" style="--c:var(--blue)">${EQ_EMOJI[id]} ${name}</button>`).join('')}
     </div>
 
@@ -435,11 +456,19 @@ function openGenerator() {
         opts.groups.has(g) ? opts.groups.delete(g) : opts.groups.add(g);
         gg.classList.toggle('on', opts.groups.has(g)); haptic(); return;
       }
+      if (e.target.closest('[data-geq-all]')) {   // todo el material (o nada si ya estaba todo)
+        const all = GEN_EQS.every(q => opts.eqs.has(q));
+        opts.eqs = new Set(all ? [] : GEN_EQS);
+        haptic();
+        return setSheetContent(html(), mount);
+      }
       const ge = e.target.closest('[data-geq]');
       if (ge) {
         const q = ge.dataset.geq;
         opts.eqs.has(q) ? opts.eqs.delete(q) : opts.eqs.add(q);
-        ge.classList.toggle('on', opts.eqs.has(q)); haptic(); return;
+        ge.classList.toggle('on', opts.eqs.has(q));
+        body.querySelector('[data-geq-all]').classList.toggle('on', GEN_EQS.every(x => opts.eqs.has(x)));
+        haptic(); return;
       }
       if (e.target.closest('#gen-go')) {
         if (!opts.groups.size) return toast('Elige al menos un grupo muscular');

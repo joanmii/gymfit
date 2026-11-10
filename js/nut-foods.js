@@ -8,7 +8,7 @@ import { chev } from './calendar.js';
 import { setSheetContent } from './sheet.js';
 import { cap, esc, haptic, r0, r1, saveSettings, state, toast } from './utils.js';
 import { ALL_TYPES, defaultType, favKey, freshBox, ingList, inType, macroRow, MEAL_TYPES, mealScore, newDraft, productToFood, scaleFood, scoreCard, sumItems, TYPE, typeChips, typesOf } from './nut-core.js';
-import { bindStarLongPress, catChips, FAV_EMPTY, FOOD_EMOJIS, foodThumb, isFoodFav, listFoods, loadFavorites, loadFoodFavs, loadMyFoods, myDishes, myFoodsCache, setDishTypes, starSpan, subChips, toggleFoodFav, toggleTopFav } from './nut-favs.js';
+import { bindStarLongPress, catChips, FAV_EMPTY, favLevel, FOOD_EMOJIS, foodThumb, isFoodFav, listFoods, loadFavorites, loadFoodFavs, loadMyFoods, myDishes, myFoodsCache, setDishTypes, starSpan, subChips, toggleFichaFav, toggleFoodFav, toggleTopFav } from './nut-favs.js';
 import { openAddMenu } from './nut-add.js';
 import { openReview } from './nut-review.js';
 import { convertToRecipe } from './nut-recipes.js';
@@ -320,7 +320,10 @@ function openFoodDetail(food) {
   const [ul, ug] = portions[0];   // la ración principal: 1 bocata, 1 vaso, 1 unidad…
   const unitName = ul === '100 g' ? '100 g' : `1 ${ul} (${r0(ug)} g)`;
   setSheetContent(`
-    <button class="link back" data-back>${chev('l')} Alimentos</button>
+    <div class="sheet-title-row">
+      <button class="link back" data-back style="margin:0 0 0 -6px">${chev('l')} Alimentos</button>
+      <button class="fav-circle" data-ffav aria-label="Favorito"></button>
+    </div>
     <div class="food-hero">
       <button class="fh-emoji" data-emoji aria-label="Cambiar emoji">${foodThumb(food)}</button>
       <div><b>${esc(food.name)}</b><small>${esc(unitName)} · ${r0(p.kcal * ug / 100)} kcal</small></div>
@@ -333,10 +336,10 @@ function openFoodDetail(food) {
     <div class="card portion-list">${portions.map(([l, g]) => nutriRow(l === '100 g' ? '100 g' : `1 ${esc(l)}`, `${r0(g)} g`, scaleFood(food, g))).join('')}</div>
     <div class="label">Puntuación</div>
     <div class="card score-card">${scoreCard(mealScore({ items: [scaleFood(food, 100)] }))}</div>
-    <button class="btn secondary" data-ffav style="margin-top:18px"></button>
-    ${food.custom ? '<button class="btn secondary" data-fedit>✏️ Editar alimento</button><button class="btn ghost danger" data-fdel>Borrar alimento</button>' : ''}`, body => {
+    ${food.custom ? '<button class="btn secondary" data-fedit style="margin-top:18px">✏️ Editar alimento</button><button class="btn ghost danger" data-fdel>Borrar alimento</button>' : ''}`, body => {
     const fb = body.querySelector('[data-ffav]');
-    const paintFav = () => { fb.textContent = isFoodFav(food.name) ? '★ En favoritos · quitar' : '☆ Añadir a favoritos'; };
+    // Solo la amarilla (favorito de verdad); la blanca se pone desde la lista de su categoría
+    const paintFav = () => { const on = favLevel(food.name) === 2; fb.classList.toggle('on', on); fb.textContent = on ? '★' : '☆'; };
     paintFav();
     loadFoodFavs().then(() => { if (body.isConnected) paintFav(); });
     body.addEventListener('click', async e => {
@@ -368,7 +371,7 @@ function openFoodDetail(food) {
         return openFoodBrowser();
       }
       if (e.target.closest('[data-ffav]')) {
-        await toggleFoodFav(food);
+        await toggleFichaFav(food);
         haptic();
         paintFav();
       }

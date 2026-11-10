@@ -50,8 +50,11 @@ export const isCompound = id => COMPOUND.has(id);
 const groupsOf = e => new Set(e.p.map(p => PARTS[p].group));
 
 // Duración estimada de una lista de ejercicios, en minutos
+// (el cardio cuenta sus minutos)
 export function estimateMinutes(items) {
-  const secs = items.reduce((a, it) => a + SETUP_S + (Number(it.sets) || 0) * (WORK_S + restS()), 0);
+  const secs = items.reduce((a, it) => a + SETUP_S + (EX[it.ex]?.cardio
+    ? (parseFloat(it.reps) || 0) * 60 * (Number(it.sets) || 1)
+    : (Number(it.sets) || 0) * (WORK_S + restS())), 0);
   return Math.round(WARMUP_MIN + secs / 60);
 }
 
@@ -165,7 +168,7 @@ export function generateRoutine({ minutes, groups, eqs }) {
 }
 
 // Ajusta las series para acercarse a la duración pedida
-function fitToTime(items, minutes) {
+export function fitToTime(items, minutes) {
   // Sobra tiempo: quita series a los de aislamiento (desde el final), mínimo 2
   for (let guard = 0; estimateMinutes(items) > minutes + 2 && guard < 40; guard++) {
     const it = [...items].reverse().find(x => x.sets > 2 && !COMPOUND.has(x.ex))
@@ -203,4 +206,23 @@ export function routineName(groups) {
   const names = groups.map(g => M[g].name.toLowerCase());
   const txt = names.length > 1 ? `${names.slice(0, -1).join(', ')} y ${names.at(-1)}` : names[0] || 'Rutina';
   return txt.charAt(0).toUpperCase() + txt.slice(1);
+}
+
+// Una plantilla adaptada a los minutos que tienes: quita ejercicios del final o añade de los extra,
+// y ajusta las series. El cardio reparte los minutos entre sus máquinas.
+export function templateFor(tpl, minutes) {
+  const mk = ([ex, sets, reps]) => ({ ex, sets, reps, kg: '' });
+  const base = tpl.items.map(mk).filter(x => EX[x.ex]);
+  if (!minutes) return base;
+  const more = (tpl.extra || []).map(mk).filter(x => EX[x.ex] && !base.some(b => b.ex === x.ex));
+  if (base.every(x => EX[x.ex].cardio)) {
+    const all = [...base, ...more], n = Math.max(1, Math.min(all.length, Math.round(minutes / 20)));
+    const each = Math.max(5, Math.round((minutes - WARMUP_MIN - n) / n));
+    return all.slice(0, n).map(x => ({ ...x, reps: String(each) }));
+  }
+  const items = [...base];
+  while (items.length > 2 && estimateMinutes(items) > minutes + 4) items.pop();
+  while (more.length && estimateMinutes(items) < minutes - 6) items.push(more.shift());
+  fitToTime(items, minutes);
+  return items;
 }

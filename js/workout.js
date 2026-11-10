@@ -127,7 +127,11 @@ function setRow(it, x, st, k) {
   </div>`;
 }
 
-function itemHtml(it, x) {
+const svgPath = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+const ARROW_UP = svgPath('M12 19V5M5 12l7-7 7 7'), ARROW_DOWN = svgPath('M12 5v14M5 12l7 7 7-7');
+
+function itemHtml(it, x, all) {
+  const total = all.length;
   const ex = EX[it.ex];
   const hist = exHistory(it.ex), last = hist.at(-1), best = bestOf(hist);
   const sub = ex.cardio
@@ -139,6 +143,8 @@ function itemHtml(it, x) {
     <div class="item-top">
       <span class="rt-num" style="--c:${ex.cardio ? M.cardio.color : partColor(ex.p[0])}">${x + 1}</span>
       <div class="rt-name"><b class="ex-link" data-info="${it.ex}">${esc(ex.name)}</b><small>${esc(sub)}</small></div>
+      <button class="icon-btn" data-mvex="${x}" data-d="-1" ${x === 0 ? 'disabled' : ''} aria-label="Subir">${ARROW_UP}</button>
+      <button class="icon-btn" data-mvex="${x}" data-d="1" ${x === total - 1 ? 'disabled' : ''} aria-label="Bajar">${ARROW_DOWN}</button>
       <button class="icon-btn" data-rmex="${x}" aria-label="Quitar ejercicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     ${variantChips(it.ex, `data-vx="${x}"`, true)}
@@ -238,7 +244,7 @@ function mountWorkout(body, s) {
       const [x, k] = d.dataset.done.split('-').map(Number);
       const it = s.items[x], st = it.sets[k];
       if (!st.done) {
-        if (num(st.reps) === null) st.reps = parseInt(it.target, 10) || '';
+        if (num(st.reps) === null) st.reps = parseInt(it.target, 10) || (isCardio(it.ex) ? '' : 10);   // sin repeticiones: las del objetivo o 10
         if (num(st.reps) === null) { toast('Apunta las repeticiones'); return d.closest('.wk-row').querySelector('[data-f=reps]').focus(); }
         st.done = true;
         // Lleva el peso a la siguiente serie si está vacía
@@ -266,6 +272,13 @@ function mountWorkout(body, s) {
     }
     const rmset = e.target.closest('[data-rmset]');
     if (rmset) { s.items[Number(rmset.dataset.rmset)].sets.pop(); save(); return redraw(); }
+    const mv = e.target.closest('[data-mvex]');
+    if (mv) {   // cambiar el orden de los ejercicios (con sus series)
+      const i = Number(mv.dataset.mvex), j = i + Number(mv.dataset.d);
+      if (j < 0 || j >= s.items.length) return;
+      [s.items[i], s.items[j]] = [s.items[j], s.items[i]];
+      save(); haptic(); return redraw();
+    }
     const rmex = e.target.closest('[data-rmex]');
     if (rmex) {
       const x = Number(rmex.dataset.rmex);
@@ -299,11 +312,13 @@ function openPicker(s) {
     <button class="link back" id="back">${chev('l')} Volver al entreno</button>
     <h2 class="sheet-title">Añadir ejercicio</h2>`, body => {
     body.querySelector('#back').addEventListener('click', back);
-    mountLibrary(body, pickFilter, exId => {
+    const addEx = exId => {
       s.items.push(newItem(exId));
       persist(s); haptic();
+      toast(`Añadido: ${EX[exId].name}`);
       back();
-    }, true);
+    };
+    mountLibrary(body, pickFilter, addEx, true, exId => showExercise(exId, () => openPicker(s), false, { label: '＋ Añadir al entreno', fn: addEx }));
   });
 }
 
