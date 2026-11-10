@@ -8,23 +8,19 @@ import { chev } from './calendar.js';
 import { setSheetContent } from './sheet.js';
 import { cap, esc, haptic, r0, r1, saveSettings, state, toast } from './utils.js';
 import { ALL_TYPES, defaultType, favKey, freshBox, ingList, inType, macroRow, MEAL_TYPES, mealScore, newDraft, productToFood, scaleFood, scoreCard, sumItems, TYPE, typeChips, typesOf } from './nut-core.js';
-import { catChips, FAV_EMPTY, FOOD_EMOJIS, foodThumb, isFoodFav, listFoods, loadFavorites, loadFoodFavs, loadMyFoods, myDishes, myFoodsCache, setDishTypes, toggleFoodFav } from './nut-favs.js';
+import { bindStarLongPress, catChips, FAV_EMPTY, FOOD_EMOJIS, foodThumb, isFoodFav, listFoods, loadFavorites, loadFoodFavs, loadMyFoods, myDishes, myFoodsCache, setDishTypes, starSpan, subChips, toggleFoodFav, toggleTopFav } from './nut-favs.js';
 import { openAddMenu } from './nut-add.js';
 import { openReview } from './nut-review.js';
 import { convertToRecipe } from './nut-recipes.js';
 
 // ---------- Desplegable «Añadir alimento» (dentro de la revisión de la comida) ----------
 // Se pinta dentro de `el`. ctx: { onPick(item), onManual(), onScan() }
-export const pickerState = { q: '', cat: 'fav' };
+export const pickerState = { q: '', cat: 'fav', sub: 'all' };
 
 const portionText = f => {
   if (!f.per100) return '';
   const [label, g] = f.portions?.[0] || ['100 g', 100];
   return `${label === '100 g' ? '100 g' : `1 ${label} (${r0(g)} g)`} · ${r0(f.per100.kcal * g / 100)} kcal`;
-};
-const starSpan = f => {
-  const on = isFoodFav(f.name);
-  return `<span class="fstar ${on ? 'on' : ''}" data-star role="button" aria-label="${on ? 'Quitar de' : 'Guardar en'} favoritos">${on ? '★' : '☆'}</span>`;
 };
 const foodRow = (f, attr) => `
   <button class="food-row" ${attr}>
@@ -55,6 +51,7 @@ export function mountFoodPicker(el, ctx) {
     </div>
     <div class="label" data-pk-label>🍽️ Alimentos</div>
     <div class="chips scroll" data-pk-cats>${catChips(st.cat)}</div>
+    <div data-pk-subs></div>
     <div class="food-list" data-pk-res></div>
     <div data-pk-online></div>`;
 
@@ -62,6 +59,7 @@ export function mountFoodPicker(el, ctx) {
   const res = box.querySelector('[data-pk-res]');
   const onl = box.querySelector('[data-pk-online]');
   const cats = box.querySelector('[data-pk-cats]');
+  const subs = box.querySelector('[data-pk-subs]');
 
   const paintOnline = (state, msg = '') => {
     const query = st.q.trim();
@@ -89,7 +87,8 @@ export function mountFoodPicker(el, ctx) {
   const paint = () => {
     const query = st.q.trim();
     cats.hidden = !!query;
-    shown = listFoods(st.cat, query);
+    subs.innerHTML = query ? '' : subChips(st.cat, st.sub);
+    shown = listFoods(st.cat, query, undefined, st.sub);
     box.querySelector('[data-pk-label]').hidden = !!query && !shown.length;
     res.innerHTML = shown.length
       ? shown.map((f, i) => row(f, `data-fi="${i}"`)).join('')
@@ -104,17 +103,26 @@ export function mountFoodPicker(el, ctx) {
   q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { st.q = q.value; paint(); }, 120); });
   q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); q.blur(); } });
 
+  bindStarLongPress(box, async star => {
+    const f = rowFood(star.closest('.food-row'));
+    if (!f) return;
+    await toggleTopFav(f);
+    haptic();
+    return st.q.trim() ? refreshStars() : paint();
+  });
   box.addEventListener('click', async e => {
     const act = e.target.closest('[data-pk]')?.dataset.pk;
     if (act === 'manual') return ctx.onManual();
     if (act === 'scan') return ctx.onScan();
     const c = e.target.closest('[data-cat]');
     if (c) {
-      st.cat = c.dataset.cat;
+      st.cat = c.dataset.cat; st.sub = 'all';
       cats.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b === c));
       return paint();
     }
-    // ☆ de una fila (o la fila entera en la lista de favoritos)
+    const sb = e.target.closest('[data-sub]');
+    if (sb) { st.sub = sb.dataset.sub; haptic(); return paint(); }
+    // ☆ de una fila: toque = favorito (blanca); mantener pulsada = favorito favorito (amarilla)
     const fr = e.target.closest('.food-row');
     if (fr && e.target.closest('[data-star]')) {
       const f = rowFood(fr);
@@ -143,7 +151,7 @@ export function mountFoodPicker(el, ctx) {
 }
 
 // ---------- Lista de alimentos y platos: ficha completa de cada uno y crear platos ----------
-export const browserState = { q: '', cat: 'fav', tab: 'foods', dtype: 'all' };
+export const browserState = { q: '', cat: 'fav', sub: 'all', tab: 'foods', dtype: 'all' };
 const infoRow = (f, attr, sub, star = false) => `
   <button class="food-row" ${attr}>
     ${f.items ? (f.photo ? `<img src="${esc(f.photo)}" alt="" loading="lazy">` : `<span class="e">${f.emoji || TYPE(typesOf(f)?.[0]).emoji}</span>`) : foodThumb(f)}
@@ -181,10 +189,10 @@ export function openFoodBrowser() {
     };
     const paintFoods = () => {
       const query = st.q.trim();
-      foods = listFoods(st.cat, query, 60);
+      foods = listFoods(st.cat, query, 60, st.sub);
       listEl.innerHTML = `
         <div class="label">📋 ${query ? 'Resultados' : 'Alimentos'}</div>
-        ${query ? '' : `<div class="chips scroll">${catChips(st.cat)}</div>`}
+        ${query ? '' : `<div class="chips scroll">${catChips(st.cat)}</div>${subChips(st.cat, st.sub)}`}
         <div class="food-list">${foods.map((f, i) => infoRow(f, `data-fi="${i}"`, portionText(f), true)).join('')
           || (!query && st.cat === 'fav' ? FAV_EMPTY : '<div class="muted small" style="text-align:center;margin:12px 0">No está en la lista.</div>')}</div>
         ${query.length >= 2 ? `<div data-web>${storeChips()}<button class="btn secondary" data-websearch style="margin-top:10px">🌐 Buscar «${esc(query)}» en internet</button></div>` : ''}`;
@@ -193,6 +201,14 @@ export function openFoodBrowser() {
     paint();
     Promise.all([loadFoodFavs(), loadMyFoods(), loadFavorites()]).then(() => { if (listEl.isConnected) paint(); });
 
+    bindStarLongPress(listEl, async star => {
+      const b = star.closest('[data-fi]');
+      const f = b && foods[Number(b.dataset.fi)];
+      if (!f) return;
+      await toggleTopFav(f);
+      haptic();
+      paintFoods();
+    });
     let tm;
     body.querySelector('#bq').addEventListener('input', e => { clearTimeout(tm); tm = setTimeout(() => { st.q = e.target.value; paint(); }, 120); });
     body.addEventListener('click', async e => {
@@ -206,7 +222,9 @@ export function openFoodBrowser() {
       if (di) return openDishDetail(dishes[Number(di.dataset.di)]);
       if (e.target.closest('[data-newfood]')) return openFoodEditor({ cat: st.cat === 'fav' ? 'lacteos' : st.cat });
       const c = e.target.closest('[data-cat]');
-      if (c) { st.cat = c.dataset.cat; return paint(); }
+      if (c) { st.cat = c.dataset.cat; st.sub = 'all'; return paint(); }
+      const sb = e.target.closest('[data-sub]');
+      if (sb) { st.sub = sb.dataset.sub; haptic(); return paint(); }
       const pick = (attr, arr) => { const b = e.target.closest(`[${attr}]`); return b ? arr[Number(b.getAttribute(attr))] : null; };
       // ☆ en la lista: a favoritos (y sube arriba en su categoría)
       if (e.target.closest('[data-star]') && pick('data-fi', foods)) {

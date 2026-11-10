@@ -304,6 +304,12 @@ function drawProps(props, J, layer) {
         break;
       }
       case 'handle': s += dot(attach(J, p.at), 3.6, 'e'); break;
+      // Barra horizontal de polea (jalón) que sobresale un poco de las manos
+      case 'hbar': {
+        const xs = [J.ha[0], J.ha2[0]], y = (J.ha[1] + J.ha2[1]) / 2;
+        s += line([Math.min(...xs) - 12, y], [Math.max(...xs) + 12, y], 4, 'e');
+        break;
+      }
       case 'vbar': { const c = attach(J, p.at); s += line(add(c, [0, -10]), add(c, [0, 10]), 4.5, 'e'); break; }
       case 'plate': s += dot(attach(J, p.at), 10, 'plate', 3.5) + dot(attach(J, p.at), 2.5, 'e'); break;
       case 'wheel': s += dot(attach(J, p.at), 9.5, 'plate', 3.5) + dot(attach(J, p.at), 2.5, 'e'); break;

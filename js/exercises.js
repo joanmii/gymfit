@@ -347,6 +347,42 @@ export const isCardio = id => !!EX[id]?.cardio;
 
 export const EX = Object.fromEntries(EXERCISES.map(e => [e.id, e]));
 
+// ---------- Variantes ----------
+// Ejercicios que son el mismo movimiento con otro material, ángulo o agarre.
+// Cada ejercicio está como mucho en un grupo; la etiqueta es lo que sale en el botón.
+export const VARIANTS = [
+  { name: 'Press de banca', items: [['press-banca', 'Barra'], ['press-mancuernas', 'Mancuernas'], ['press-maquina', 'Máquina'], ['press-cerrado', 'Agarre cerrado']] },
+  { name: 'Press inclinado', items: [['press-inclinado', 'Barra'], ['press-inclinado-mancuernas', 'Mancuernas'], ['press-inclinado-maquina', 'Máquina']] },
+  { name: 'Press declinado', items: [['press-declinado', 'Barra'], ['press-declinado-mancuernas', 'Mancuernas']] },
+  { name: 'Aperturas', items: [['aperturas', 'Mancuernas'], ['pec-deck', 'Máquina']] },
+  { name: 'Cruce de poleas', items: [['cruce-poleas-bajo', 'De abajo arriba'], ['cruce-poleas-medio', 'Media altura'], ['cruce-poleas', 'De arriba abajo']] },
+  { name: 'Flexiones', items: [['flexiones', 'Normales'], ['flexiones-declinadas', 'Pies elevados']] },
+  { name: 'Fondos', items: [['fondos-paralelas', 'Paralelas'], ['fondos-banco', 'Banco']] },
+  { name: 'Remo', items: [['remo-barra', 'Barra'], ['remo-mancuerna', 'Mancuerna'], ['remo-polea', 'Polea']] },
+  { name: 'Peso muerto', items: [['peso-muerto', 'Convencional'], ['peso-muerto-rumano', 'Rumano']] },
+  { name: 'Press de hombros', items: [['press-militar', 'Barra'], ['press-hombro-mancuernas', 'Mancuernas'], ['press-arnold', 'Arnold']] },
+  { name: 'Elevaciones de hombro', items: [['elevaciones-laterales', 'Laterales'], ['elevaciones-frontales', 'Frontales'], ['pajaros', 'Posteriores']] },
+  { name: 'Curl de bíceps', items: [['curl-barra', 'Barra'], ['curl-mancuernas', 'Mancuernas'], ['curl-martillo', 'Martillo'], ['curl-predicador', 'Scott'], ['curl-polea', 'Polea'], ['curl-concentrado', 'Concentrado']] },
+  { name: 'Extensión de tríceps', items: [['extension-polea', 'Polea'], ['extension-overhead', 'Tras nuca'], ['press-frances', 'Tumbado (francés)'], ['patada-triceps', 'Patada']] },
+  { name: 'Plancha', items: [['plancha', 'Frontal'], ['plancha-lateral', 'Lateral']] },
+  { name: 'Sentadilla', items: [['sentadilla', 'Trasera'], ['sentadilla-frontal', 'Frontal'], ['sentadilla-goblet', 'Goblet'], ['bulgara', 'Búlgara']] },
+  { name: 'Aductores', items: [['aductores-maquina', 'Máquina'], ['aductores-polea', 'Polea']] },
+  { name: 'Gemelos', items: [['gemelos-pie', 'De pie'], ['gemelos-sentado', 'Sentado']] },
+  { name: 'Empuje de cadera', items: [['hip-thrust', 'Hip thrust con barra'], ['puente-gluteo', 'Puente en el suelo']] },
+  { name: 'Cinta', items: [['cinta', 'Correr'], ['cinta-inclinada', 'Caminar inclinada']] },
+];
+const VARIANT_OF = Object.fromEntries(VARIANTS.flatMap(g => g.items.map(([id]) => [id, g])));
+export const variantsOf = id => VARIANT_OF[id] || null;
+
+// Botones de variantes de un ejercicio. attr: atributo extra para saber a qué fila pertenecen
+export function variantChips(id, attr = '', small = false) {
+  const g = variantsOf(id);
+  if (!g) return '';
+  return `<div class="chips scroll variants ${small ? 'small' : ''}" role="group" aria-label="Variantes de ${g.name}">
+    ${g.items.filter(([v]) => EX[v]).map(([v, label]) => `<button class="chip ${v === id ? 'on' : ''}" data-variant="${v}" ${attr} style="--c:var(--accent)" ${v === id ? 'aria-pressed="true"' : ''}>${label}</button>`).join('')}
+  </div>`;
+}
+
 // Enlace para ver vídeos del ejercicio
 export const videoUrl = ex => `https://www.youtube.com/results?search_query=${encodeURIComponent(`${ex.name} técnica correcta`)}`;
 

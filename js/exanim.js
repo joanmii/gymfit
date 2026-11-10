@@ -123,9 +123,16 @@ export const ANIMS = {
       { sh0: [-2, 171], t: 96, ha: [10, 187], an: [-20, 51], ual: 0.65 },
     ],
   },
+  // De frente: sentado con los muslos bajo los rodillos, barra ancha que baja hasta la parte alta del pecho
   'jalon-pecho': {
-    props: [...SEAT, { k: 'pad', at: [26, 64], r: 6 }, { k: 'cable', from: [-2, 196], at: 'ha' }, { k: 'handle', at: 'ha' }],
-    k: [{ hip: [0, 50], t: 100, an: [38, 4], ha: [-3, 150] }, { hip: [0, 50], t: 104, an: [38, 4], ha: [6, 104], ual: 0.8 }],
+    v: 'front',
+    props: [{ k: 'seg', p: [-44, 206, 44, 206], w: 5 }, { k: 'bench', p: [-28, 46, 28, 46] },
+      { k: 'cable', from: [0, 200], at: 'mid' }, { k: 'hbar', at: 'mid' },
+      { k: 'pad', at: [17, 57], r: 6 }, { k: 'pad', at: [-17, 57], r: 6 }],
+    k: [
+      { hip: [0, 52], legsFront: true, kn: [15, 48], an: [14, 6], ha: [36, 148], eb: -1 },
+      { hip: [0, 52], legsFront: true, kn: [15, 48], an: [14, 6], ha: [31, 97], eb: -1 },
+    ],
   },
   'remo-barra': {
     props: [{ k: 'bar', at: 'ha' }],

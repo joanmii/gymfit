@@ -442,3 +442,104 @@ export function searchFoods(query, limit = 40) {
 }
 
 export const foodsByCat = cat => FOODS.filter(f => f.cat === cat);
+
+// ---------- Subcategorías ----------
+// Cada subcategoría reconoce sus alimentos por el nombre (sin tildes); gana la primera que encaja
+// y lo que no encaja en ninguna va a «Otros». Sirve también para los alimentos que añades tú.
+export const FOOD_SUBCATS = {
+  lacteos: [
+    ['huevos', 'Huevos', '🥚', /huevo|clara/],
+    ['yogures', 'Yogures', '🥣', /yogur|skyr|kefir/],
+    ['quesos', 'Quesos', '🧀', /queso|mozzarella/],
+    ['mantequilla', 'Mantequilla y nata', '🧈', /mantequilla|nata/],
+  ],
+  carne: [
+    ['pollo', 'Pollo y pavo', '🍗', /pollo|pavo|alitas/],
+    ['ternera', 'Ternera', '🥩', /ternera|entrecot|picada|buey|vaca/],
+    ['cerdo', 'Cerdo', '🐖', /cerdo|secreto|presa|iberic/],
+    ['salchichas', 'Salchichas', '🌭', /salchicha/],
+    ['otras', 'Cordero y conejo', '🐑', /cordero|conejo/],
+  ],
+  embutido: [
+    ['jamon', 'Jamón y fiambre', '🍖', /jamon|pavo|mortadela/],
+    ['curados', 'Curados', '🥓', /chorizo|salchichon|fuet|lomo|sobrasada|morcilla|bacon|panceta/],
+  ],
+  pescado: [
+    ['latas', 'Latas y conservas', '🥫', /lata|escabeche|ahumado/],
+    ['marisco', 'Marisco', '🦐', /gamba|langostino|mejillon|calamar|sepia|pulpo|surimi/],
+    ['pescado', 'Pescado', '🐟', /./],
+  ],
+  pan: [
+    ['desayuno', 'Avena y cereales', '🥣', /avena|cereales|muesli/],
+    ['pan', 'Pan y tostadas', '🍞', /^pan|tostada|picos|tortitas|wrap|biscote/],
+    ['arroz', 'Arroz y pasta', '🍚', /arroz|pasta|quinoa|cuscus|harina|lentejas/],
+    ['patata', 'Patata y boniato', '🥔', /patata|boniato/],
+  ],
+  fruta: [
+    ['secas', 'Fruta seca', '🍇', /datil|pasas|orejon|higo seco/],
+    ['fresca', 'Fruta fresca', '🍎', /./],
+  ],
+  verdura: [
+    ['preparadas', 'Conservas y preparadas', '🥫', /triturad|maiz|guisante|salteada|congelad/],
+    ['ensalada', 'Para ensalada', '🥗', /tomate|lechuga|pepino|cebolla|canonigo|rucula/],
+    ['cocinar', 'Para cocinar', '🥦', /./],
+  ],
+  legumbre: [
+    ['soja', 'Soja y tofu', '🫛', /soja|tofu|edamame/],
+    ['legumbres', 'Legumbres', '🫘', /./],
+  ],
+  frutos: [
+    ['semillas', 'Semillas y cremas', '🌻', /pipas|semillas|crema/],
+    ['aceitunas', 'Aceitunas', '🫒', /aceituna/],
+    ['frutos', 'Frutos secos', '🥜', /./],
+  ],
+  salsas: [
+    ['aceites', 'Aceites', '🫒', /aceite/],
+    ['salsas', 'Salsas', '🥫', /./],
+  ],
+  bebidas: [
+    ['alcohol', 'Cerveza, vino y copas', '🍺', /cerveza|vino|tinto|cubata|cava|vermut|sangria|agua de valencia/],
+    ['refrescos', 'Zumos y refrescos', '🥤', /zumo|refresco|isotonica|energetica|kombucha|granizado/],
+    ['leche', 'Leche y batidos', '🥛', /^(leche|bebida de|batido|horchata)/],
+    ['cafe', 'Café, cacao e infusiones', '☕', /cafe|cortado|capuchino|colacao|cacao|chocolate|te o|infusion/],
+  ],
+  bolleria: [
+    ['snacks', 'Snacks salados', '🍿', /patatas fritas|palomitas/],
+    ['bolleria', 'Bollería', '🥐', /croissant|napolitana|magdalena|donut|palmera|ensaimada|farton|churro|bunuelo|gofre|rosquilleta/],
+    ['postres', 'Tartas y postres', '🍰', /tarta|bizcocho|flan|natillas|helado|tiramisu|brownie|coca|panquemao|mona|roscon|turron|polvoron/],
+    ['dulces', 'Chocolate y dulces', '🍫', /./],
+  ],
+  platos: [
+    ['huevos', 'Huevos', '🍳', /huevo|tortilla/],
+    ['ensaladas', 'Ensaladas', '🥗', /ensalad|poke/],
+    ['arroces', 'Arroces', '🥘', /arroz|paella|fideua/],
+    ['cuchara', 'Cuchara', '🍲', /lenteja|garbanzo|cocido|fabada|sopa|crema|gazpacho|salmorejo|callos|potaje/],
+    ['pasta', 'Pasta', '🍝', /macarrones|espaguetis|lasana|canelones|ramen|pad thai|pasta/],
+    ['carne', 'Carne y pescado', '🍗', /pollo|ternera|lomo|albondiga|merluza|salmon|all i pebre|esgarraet|cerdo/],
+  ],
+  bocatas: [
+    ['bocatas', 'Bocadillos', '🥖', /bocadillo|sandwich|brascada|almussafes|chivito|montadito/],
+    ['tostadas', 'Tostadas', '🍞', /tostada/],
+    ['tapas', 'Tapas', '🍤', /./],
+  ],
+  rapida: [
+    ['hamburguesas', 'Hamburguesas', '🍔', /hamburguesa|mcchicken/],
+    ['pizza', 'Pizza', '🍕', /pizza/],
+    ['kebab', 'Kebab y wraps', '🌯', /kebab|durum|lahmacun|burrito|wrap|taco/],
+    ['fritos', 'Fritos y perritos', '🍟', /./],
+  ],
+};
+export const OTHER_SUB = 'otros';
+
+// Subcategoría de un alimento (de la base o tuyo)
+export function subOf(f) {
+  const n = norm(f.name);
+  return FOOD_SUBCATS[f.cat]?.find(([, , , re]) => re.test(n))?.[0] || OTHER_SUB;
+}
+// Subcategorías que tienen algún alimento en `foods` (y «Otros» al final si hace falta)
+export function subcatsIn(cat, foods) {
+  const used = new Set(foods.map(subOf));
+  const list = (FOOD_SUBCATS[cat] || []).filter(([id]) => used.has(id)).map(([id, name, emoji]) => ({ id, name, emoji }));
+  if (used.has(OTHER_SUB)) list.push({ id: OTHER_SUB, name: 'Otros', emoji: '🍽️' });
+  return list.length > 1 ? list : [];
+}

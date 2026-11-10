@@ -5,7 +5,7 @@ import { db } from './db.js';
 import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet } from './sheet.js';
 import { bodyMap, setMapSelection, PARTS, partColor } from './bodymap.js';
-import { EXERCISES, EX, EQUIPMENT, TEMPLATES, videoUrl, isCardio } from './exercises.js';
+import { EXERCISES, EX, EQUIPMENT, TEMPLATES, videoUrl, isCardio, variantChips, variantsOf } from './exercises.js';
 import { startWorkout, openWorkout, getActive, progressBlock } from './workout.js';
 import { GEN_GROUPS, PRESETS, generateRoutine, swapExercise, estimateMinutes, routineName } from './generator.js';
 import { state, MUSCLES, M, esc, toast, haptic } from './utils.js';
@@ -221,14 +221,17 @@ function zoneList(ids) {
 function openExercise(id) { showExercise(id); }
 
 // back: si se abre desde una rutina o un entreno, botón para volver a donde estabas
-export function showExercise(id, back = null) {
+// replace: cambiar de variante sin volver a abrir la hoja
+export function showExercise(id, back = null, replace = false) {
   const ex = EX[id];
   if (!ex) return;
   const prog = progressBlock(id);
-  (back ? setSheetContent : openSheet)(`
+  const vg = variantsOf(id);
+  (back || replace ? setSheetContent : openSheet)(`
     ${back ? `<button class="link back" id="ex-back">${chev('l')} Volver</button>` : ''}
     <h2 class="sheet-title">${esc(ex.name)}</h2>
     <div class="muted small">${EQ_EMOJI[ex.eq]} ${EQUIPMENT[ex.eq]}</div>
+    ${vg ? `<div class="label">Variantes · ${esc(vg.name)}</div>${variantChips(id)}` : ''}
     ${ex.cardio ? '' : `<div class="card" style="margin-top:14px">
       ${bodyMap({ primary: ex.p, secondary: ex.s, small: true })}
       <div class="zones">
@@ -247,6 +250,10 @@ export function showExercise(id, back = null) {
     if (anim) mountAnim(anim, id);
     body.querySelector('#add-to')?.addEventListener('click', () => chooseRoutine(id));
     body.querySelector('#ex-back')?.addEventListener('click', back);
+    body.querySelector('.variants')?.addEventListener('click', e => {
+      const v = e.target.closest('[data-variant]')?.dataset.variant;
+      if (v && v !== id) { haptic(); showExercise(v, back, true); }
+    });
   });
 }
 
@@ -294,6 +301,7 @@ function openEditor(existing) {
         <button class="icon-btn" data-mv="${i}" data-d="1" ${i === draft.items.length - 1 ? 'disabled' : ''} aria-label="Bajar">${arrow('M12 5v14M5 12l7 7 7-7')}</button>
         <button class="icon-btn" data-rm="${i}" aria-label="Quitar">${arrow('M6 6l12 12M18 6L6 18')}</button>
       </div>
+      ${variantChips(it.ex, `data-vi="${i}"`, true)}
       ${ex?.cardio ? `<div class="item-grid rt-grid one">
         <label>Minutos<input data-i="${i}" data-f="reps" inputmode="numeric" value="${esc(it.reps)}"></label>
       </div>` : `<div class="item-grid rt-grid">
@@ -331,6 +339,12 @@ function openEditor(existing) {
     body.addEventListener('click', async e => {
       const info = e.target.closest('[data-info]');
       if (info) return showExercise(info.dataset.info, () => setSheetContent(editorHtml(), mountEditor));
+      const vb = e.target.closest('[data-variant][data-vi]');
+      if (vb) {   // cambiar el ejercicio por otra variante, conservando series, reps y kg
+        draft.items[Number(vb.dataset.vi)].ex = vb.dataset.variant;
+        haptic();
+        return redrawItems();
+      }
       const mv = e.target.closest('[data-mv]');
       if (mv) {
         const i = Number(mv.dataset.mv), j = i + Number(mv.dataset.d);

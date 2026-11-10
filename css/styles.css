@@ -1015,8 +1015,14 @@ button.act:active { transform: scale(.98); }
 .item-units b { font-family: var(--rounded); font-size: 17px; color: var(--text); }
 
 .fav-types { margin: 0 0 10px; }
-.food-row .fstar { width: 32px; height: 32px; flex: none; display: grid; place-items: center; font-size: 22px; line-height: 1; color: var(--muted); }
-.food-row .fstar.on { color: #ffd60a; }
+.food-row .fstar { width: 32px; height: 32px; flex: none; display: grid; place-items: center; font-size: 22px; line-height: 1; color: var(--muted);
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: transform .15s; }
+.food-row .fstar:active { transform: scale(1.25); }
+/* Favorito: estrella blanca (con borde para que se vea también en modo claro). Favorito favorito: amarilla */
+.food-row .fstar.lv1 { color: #fff; -webkit-text-stroke: 1px color-mix(in srgb, var(--text) 45%, transparent); }
+.food-row .fstar.lv2 { color: #ffd60a; text-shadow: 0 0 8px color-mix(in srgb, #ffd60a 45%, transparent); }
+.subchips { margin-top: -2px; }
+.subchips .chip { min-height: 30px !important; padding: 4px 10px !important; font-size: 13px !important; }
 .food-row .tagbtn { width: 32px; height: 32px; flex: none; display: grid; place-items: center; font-size: 17px; border-radius: 50%; opacity: .55; }
 .food-row .tagbtn.on { opacity: 1; background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .tag-editor { padding: 10px 12px 6px; margin: -2px 0 4px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
@@ -1101,3 +1107,8 @@ input.switch:checked::before { transform: translateX(20px); }
 .tm-done .e { display: block; font-size: 56px; line-height: 1.1; margin-bottom: 6px; }
 #view-routines, #view-nutrition { padding-bottom: calc(var(--tabh) + var(--safe-b) + 90px); }
 #fab-timer svg { width: 32px; height: 32px; }
+
+/* Variantes de un ejercicio (ficha, rutina y entreno) */
+.variants { margin-bottom: 4px; }
+.variants.small { margin: 2px -16px 8px; }
+.variants.small .chip { min-height: 30px; padding: 4px 11px; font-size: 13px; }
