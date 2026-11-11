@@ -399,7 +399,7 @@ function openFoodDetail(food) {
     <div class="emoji-grid" data-egrid hidden>${FOOD_EMOJIS.map(em => `<button data-em="${em}">${em}</button>`).join('')}</div>
     <button class="btn primary" data-fuse style="margin-top:14px">🍽️ Añadir a una comida</button>
     <div class="label">${ul === '100 g' ? 'Por 100 g' : `Por ${esc(ul)} (${r0(ug)} g)`}</div>
-    <div class="card">${macroRow(scaleFood(food, ug))}${p.sugar != null ? `<div class="sugar-line">de los hidratos, azúcares ${String(r1(p.sugar * ug / 100)).replace('.', ',')} g</div>` : ''}</div>
+    <div class="card">${macroRow(scaleFood(food, ug))}${p.sugar != null ? `<div class="sugar-line">azúcares ${String(r1(p.sugar * ug / 100)).replace('.', ',')} g</div>` : ''}</div>
     <div class="label">Raciones</div>
     <div class="card portion-list">${portions.map(([l, g]) => nutriRow(l === '100 g' ? '100 g' : `1 ${esc(l)}`, `${r0(g)} g`, scaleFood(food, g))).join('')}</div>
     <div class="label">Puntuación</div>

@@ -107,8 +107,14 @@ function solveFront(P) {
   const shA = add(shC, mul(r, L.SW), mul(u, -2 + su)), shB = add(shC, mul(r, -L.SW), mul(u, -2 + su));
   const hpA = add(hip, mul(r, L.HW)), hpB = add(hip, mul(r, -L.HW));
   const al = P.al ?? 1, alB = P.alB ?? al, eb = P.eb ?? 1;
-  const [elA, haA] = ik(shA, P.ha, L.UA * al, L.FA * al, eb);
-  const [elB, haB] = ik(shB, P.hb || mirror(P.ha), L.UA * alB, L.FA * alB, P.ebB ?? -eb);
+  let elA, haA, elB, haB;
+  if (P.el) {                                     // codos puestos a mano: el brazo no hace quiebros al moverse
+    [elA, haA] = [P.el, P.ha];
+    [elB, haB] = [P.elB || mirror(P.el), P.hb || mirror(P.ha)];
+  } else {
+    [elA, haA] = ik(shA, P.ha, L.UA * al, L.FA * al, eb);
+    [elB, haB] = ik(shB, P.hb || mirror(P.ha), L.UA * alB, L.FA * alB, P.ebB ?? -eb);
+  }
   const an = P.an || [hip[0] + 12, 4];
   const kb = P.kb ?? 1, tl = L.TH * (P.tll ?? 1);
   let knA, anA, knB, anB;
@@ -143,7 +149,7 @@ const ease = k => 0.5 - Math.cos(Math.PI * k) / 2;
 // Las manos relativas al hombro (hr/hr2) se pasan a posiciones absolutas en cada postura,
 // así se pueden mezclar con posturas que usan manos absolutas (ha/hb) al interpolar
 function normalize(A) {
-  if (A._norm || A.v === 'front') return A;
+  if (A._norm || A.v === 'front' || A.v === 'back') return A;
   A.k = A.k.map(P => {
     const t = P.t ?? 90;
     const sh = P.sh0 || add(P.hip, dir(t, L.T + (P.su || 0)));
@@ -164,7 +170,26 @@ function timing(A) {
   return { segs, move, hold, half: segs * move + hold };
 }
 
-// Ida y vuelta por las posturas, con una pausa en cada extremo
+// Curva suave que pasa por los cuatro valores (Catmull-Rom): entre b y c, con a y d de vecinos
+const spline = (a, b, c, d, k) => 0.5 * (2 * b + (c - a) * k + (2 * a - 5 * b + 4 * c - d) * k * k + (3 * b - a - 3 * c + d) * k * k * k);
+// Postura entre keys[i] y keys[i+1] siguiendo una curva por las posturas vecinas (sin esquinas)
+function splinePose(keys, i, k) {
+  const a = keys[i], b = keys[i + 1], p = keys[i - 1] || a, n = keys[i + 2] || b;
+  const out = { ...a };
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const x = a[key], y = b[key];
+    if (typeof x === 'number' && typeof y === 'number') {
+      out[key] = spline(typeof p[key] === 'number' ? p[key] : x, x, y, typeof n[key] === 'number' ? n[key] : y, k);
+    } else if (Array.isArray(x) && Array.isArray(y)) {
+      const pa = Array.isArray(p[key]) ? p[key] : x, na = Array.isArray(n[key]) ? n[key] : y;
+      out[key] = x.map((v, j) => spline(pa[j], v, y[j], na[j], k));
+    } else out[key] = x ?? y;
+  }
+  return out;
+}
+
+// Ida y vuelta por las posturas, con una pausa en cada extremo.
+// Arranca y frena una sola vez en todo el recorrido: en las posturas intermedias no se para.
 function poseAt(A, ms) {
   const keys = A.k;
   if (keys.length === 1) return keys[0];
@@ -173,10 +198,10 @@ function poseAt(A, ms) {
   let forward = true;
   if (x >= half) { x -= half; forward = false; }
   if (x >= segs * move) return forward ? keys[segs] : keys[0];
-  let s = x / move;
+  let s = ease(x / (segs * move)) * segs;
   if (!forward) s = segs - s;
-  const i = Math.min(segs - 1, Math.floor(s));
-  return lerpPose(keys[i], keys[i + 1], ease(s - i));
+  const i = Math.min(segs - 1, Math.max(0, Math.floor(s)));
+  return segs === 1 ? lerpPose(keys[0], keys[1], s) : splinePose(keys, i, s - i);
 }
 
 // ---------- Primitivas SVG (y caja que ocupan, para encuadrar) ----------
@@ -262,6 +287,40 @@ function drawFront(J, H) {
   return s;
 }
 
+// ---------- Cuerpo de espaldas ----------
+// La misma postura que de frente, vista por detrás: se ve la espalda (dorsal, trapecio, lumbar),
+// y lo que queda delante del cuerpo (antebrazos, manos, barra) se dibuja antes para que lo tape.
+const BACK_ZONES = {
+  upperback: [[[0.3, 1.6], [0.38, 9.2], [0.62, 11.2], [0.8, 13.2], [0.87, 9.5], [0.87, 1.6]], [[0.3, -1.6], [0.38, -9.2], [0.62, -11.2], [0.8, -13.2], [0.87, -9.5], [0.87, -1.6]]],
+  trap: [[[1.03, 5], [0.97, 13.5], [0.9, 9], [0.64, 0], [0.9, -9], [0.97, -13.5], [1.03, -5]]],
+  lowerback: [[[0.04, 6.4], [0.3, 6], [0.3, -6], [0.04, -6.4]]],
+};
+function backLegs(J, H) {
+  const c = zone => (H[zone] ? 'h' : 'f');
+  let s = '';
+  for (const [hp, kn, an, side] of [[J.hpA, J.knA, J.anA, 1], [J.hpB, J.knB, J.anB, -1]]) {
+    s += line(hp, kn, 11, c('thigh')) + line(kn, an, 9, c('calf')) + line(an, add(an, mul(J.r, 6 * side), mul(J.u, -1)), 7, 'f');
+  }
+  return s;
+}
+function backBody(J, H) {
+  const c = zone => (H[zone] ? 'h' : 'f');
+  const arms = [[J.shA, J.elA, J.haA], [J.shB, J.elB, J.haB]];
+  let s = '';
+  for (const [, el, ha] of arms) s += line(el, ha, 7, c('forearm')) + dot(ha, 4.3, 'f');
+  s += poly(TORSO_FRONT.map(p => fPt(J, p)), 'f');
+  for (const z of ['lowerback', 'upperback', 'trap']) if (H[z]) for (const zz of BACK_ZONES[z]) s += poly(zz.map(p => fPt(J, p)), 'h');
+  if (H.glute) for (const side of [1, -1]) s += dot(fPt(J, [0.03, 5.6 * side]), 6.8, 'h');
+  s += line(fPt(J, [0.12, 0]), fPt(J, [0.86, 0]), 1.6, 'sp');           // columna: se nota que es la espalda
+  s += line(fPt(J, [0.9, 9]), J.shA, 9, H.trap ? 'h' : 'f') + line(fPt(J, [0.9, -9]), J.shB, 9, H.trap ? 'h' : 'f');
+  for (const [shp, el] of arms) {
+    s += line(shp, el, 8.5, c('upperarm'));
+    if (H.shoulder) s += dot(shp, 6.2, 'h');
+  }
+  s += line(J.shC, J.neck, 8, H.trap ? 'h' : 'f') + dot(J.head, L.HR, 'f');
+  return s;
+}
+
 // ---------- Material y máquinas ----------
 function attach(J, at) {
   if (Array.isArray(at)) return at;
@@ -275,7 +334,7 @@ const BACK_PROPS = new Set(['bench', 'seg', 'box', 'cable']);
 function drawProps(props, J, layer) {
   let s = '';
   for (const p of props || []) {
-    if ((layer === 'back') !== BACK_PROPS.has(p.k)) continue;
+    if ((layer === 'back') !== (p.behind ?? BACK_PROPS.has(p.k))) continue;   // behind: detrás del cuerpo aunque no sea una máquina
     switch (p.k) {
       case 'bench': {
         const [x1, y1, x2, y2] = p.p;
@@ -326,20 +385,27 @@ function drawProps(props, J, layer) {
 }
 
 // Sombra suave bajo lo que toca el suelo
+// Cada punto cuenta según lo cerca que está del suelo, así la sombra crece y encoge sin saltos
+// cuando algo se levanta o se apoya
 function shadow(J) {
-  const pts = (J.front ? [J.anA, J.anB] : [J.toe, J.heel, J.toe2, J.heel2, J.hip, J.sh, J.ha, J.kn]).filter(p => p && p[1] < 12);
-  if (!pts.length) return '';
-  const x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
-  return `<ellipse class="shd" cx="${n1((x0 + x1) / 2)}" cy="1" rx="${n1((x1 - x0) / 2 + 9)}" ry="3"/>`;
+  const pts = (J.front ? [J.anA, J.anB] : [J.toe, J.heel, J.toe2, J.heel2, J.hip, J.sh, J.ha, J.kn]).filter(Boolean);
+  const w = pts.map(p => Math.max(0, Math.min(1, (18 - p[1]) / 8)));
+  const sw = w.reduce((a, b) => a + b, 0);
+  if (sw < 0.01) return '';
+  const c = pts.reduce((a, p, i) => a + p[0] * w[i], 0) / sw;
+  const xs = pts.map((p, i) => c + (p[0] - c) * w[i]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), k = Math.min(1, Math.max(...w));
+  return `<ellipse class="shd" cx="${n1((x0 + x1) / 2)}" cy="1" rx="${n1(((x1 - x0) / 2 + 9) * k)}" ry="${n1(3 * k)}"/>`;
 }
 
 function frame(A, ms, H, vb) {
   const P = poseAt(A, ms);
-  const J = A.v === 'front' ? solveFront(P) : solveSide(P);
+  const J = A.v === 'front' || A.v === 'back' ? solveFront(P) : solveSide(P);
   let s = '';
   if (!A.noGround && vb) s += `<line class="g" x1="${n1(vb[0])}" y1="1" x2="${n1(vb[0] + vb[2])}" y2="1" stroke-width="2"/>` + shadow(J);
+  if (A.v === 'back') s += backLegs(J, H);       // de espaldas, las piernas quedan detrás del banco
   s += drawProps(A.props, J, 'back');
-  s += J.front ? drawFront(J, H) : drawSide(J, H);
+  s += A.v === 'back' ? backBody(J, H) : J.front ? drawFront(J, H) : drawSide(J, H);
   s += drawProps(A.props, J, 'front');
   return s;
 }

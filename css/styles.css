@@ -1047,6 +1047,7 @@ button.act:active { transform: scale(.98); }
 .ex-anim-svg .b { stroke: var(--fig2); fill: var(--fig2); }
 .ex-anim-svg .h { stroke: var(--hl); fill: var(--hl); }
 .ex-anim-svg .hb { stroke: var(--hl2); fill: var(--hl2); }
+.ex-anim-svg .sp { stroke: var(--card); opacity: .45; }
 .ex-anim-svg .eye { fill: var(--card); stroke: none; }
 .ex-anim-svg .e { fill: var(--eq); stroke: var(--eq); }
 .ex-anim-svg .plate { fill: color-mix(in srgb, var(--eq) 12%, transparent); stroke: var(--eq); }

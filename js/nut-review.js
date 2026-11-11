@@ -185,7 +185,7 @@ export function openReview(draft, editing = false, fresh = false, inPlace = fals
       const food = draft.items.filter(i => +i.kcal > 0 || +i.carbs > 0), known = food.filter(i => i.sugar != null);
       const su = known.reduce((a, i) => a + (+i.sugar || 0), 0) / n;
       body.querySelector('#sugar').textContent = known.length
-        ? `de los hidratos, azúcares ${known.length < food.length ? '≥ ' : ''}${String(r1(su)).replace('.', ',')} g` : '';
+        ? `azúcares ${known.length < food.length ? '≥ ' : ''}${String(r1(su)).replace('.', ',')} g` : '';
       body.querySelector('#score').innerHTML = scoreCard(mealScore({ items: draft.items }));
       return t;
     };
