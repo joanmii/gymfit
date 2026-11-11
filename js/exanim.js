@@ -173,9 +173,15 @@ export const ANIMS = {
     props: [{ k: 'bench', p: [-42, 23, 0, 23] }, { k: 'seg', p: [64, 8, 64, 46], w: 5 }, { k: 'cable', from: [84, 30], at: 'ha' }, { k: 'handle', at: 'ha' }],
     k: [{ hip: [-20, 29], t: 90, an: [56, 26], ha: [30, 80] }, { hip: [-20, 29], t: 95, an: [56, 26], ha: [-8, 66] }],
   },
+  // Peso muerto de espaldas (las tres variantes igual): se ven lumbar, glúteos e isquios.
+  // Al inclinarse, el tronco se ve más corto (se aleja de la cámara)
   'peso-muerto': {
-    props: [{ k: 'bar', at: 'ha', r: 14 }],
-    k: [{ hip: [-30, 48], t: 28, an: [0, 4], hr: [0, -51] }, stand({ hr: [3, -50] })],
+    v: 'back',
+    props: [{ k: 'hbar', at: 'mid', under: true }],
+    k: [
+      { hip: [0, 50], tl: 0.5, an: [12, 4], kn: [16, 28], el: [22, 38], ha: [19, 18] },
+      { hip: [0, 85], an: [11, 4], kn: [11, 45], el: [21, 108], ha: [20, 82] },
+    ],
   },
   'pullover-polea': {
     props: [{ k: 'cable', from: [70, 196], at: 'ha' }, { k: 'handle', at: 'ha' }],
@@ -214,8 +220,9 @@ export const ANIMS = {
     props: [{ k: 'db', at: 'ha' }],
     k: [stand({ hr: [3, -50] }), stand({ hr: [36, -36] }), stand({ hr: [50, 6] })],
   },
+  // De espaldas: se ve trabajar el hombro posterior y la espalda alta
   'pajaros': {
-    v: 'front',
+    v: 'back',
     props: [{ k: 'db', at: 'ha' }, { k: 'db', at: 'ha2' }],
     k: [{ hip: [0, 85], tl: 0.45, an: [11, 4], ha: [12, 56] }, { hip: [0, 85], tl: 0.45, an: [11, 4], ha: [62, 100] }],
   },
@@ -406,12 +413,17 @@ export const ANIMS = {
     ],
   },
   'peso-muerto-rumano': {
-    props: [{ k: 'bar', at: 'ha' }],
-    k: [stand({ hr: [3, -50] }), { hip: [-26, 80], t: 22, an: [0, 4], hr: [0, -51] }],
-  },  // De frente: piernas muy abiertas, manos por dentro de las rodillas, torso más vertical
+    v: 'back',
+    props: [{ k: 'hbar', at: 'mid', under: true }],
+    k: [
+      { hip: [0, 85], an: [11, 4], kn: [11, 45], el: [21, 108], ha: [20, 82] },
+      { hip: [0, 82], tl: 0.45, an: [11, 4], kn: [12, 43], el: [21, 72], ha: [19, 44] },
+    ],
+  },
+  // Sumo: piernas muy abiertas, manos por dentro de las rodillas, torso más vertical
   'peso-muerto-sumo': {
-    v: 'front',
-    props: [{ k: 'hbar', at: 'mid' }],
+    v: 'back',
+    props: [{ k: 'hbar', at: 'mid', under: true }],
     k: [
       { hip: [0, 54], tl: 0.62, an: [36, 4], kb: 1, ha: [11, 33] },
       { hip: [0, 81], an: [30, 4], kb: 1, ha: [12, 72] },

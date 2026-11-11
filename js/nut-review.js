@@ -9,7 +9,7 @@ import { closeSheet, openSheet, setSheetContent } from './sheet.js';
 import { esc, haptic, keyOf, r0, r1, toast, today } from './utils.js';
 import { renderNutrition } from './nutrition.js';
 import { ALL_TYPES, blankItem, favKey, freshBox, inType, loadImage, MEAL_TYPES, mealScore, perServing, productToFood, scoreCard, searchBuiltin, servingsOf, sumItems, toJpeg, TOOLS, TYPE, typeChips, typesOf, unitText, withBase } from './nut-core.js';
-import { isFoodFav, loadFavorites, loadFoodFavs, myDishes, myRecipes, toggleFavType, toggleFoodFav } from './nut-favs.js';
+import { isFoodFav, loadFavorites, loadFoodFavs, myDishes, myFoodsCache, myRecipes, toggleFavType, toggleFoodFav } from './nut-favs.js';
 import { bindCatPicker, catPickerHtml, isSavedFood, mountFoodPicker, mountPortion, openFoodBrowser, saveProductFood } from './nut-foods.js';
 
 let pendingFood = null;   // producto escaneado desde el desplegable, para abrirlo al volver
@@ -286,6 +286,28 @@ export function openReview(draft, editing = false, fresh = false, inPlace = fals
         haptic();
         return updateTotals();
       }
+      // 🏷️ en un alimento: elegir su categoría y guardarlo en Mis alimentos con sus valores por 100 g
+      const cb = e.target.closest('[data-icat]');
+      if (cb) {
+        const card = cb.closest('.item'), it = draft.items[Number(cb.dataset.icat)];
+        const open = card.querySelector('.item-cat');
+        if (open) { open.remove(); return; }
+        const g = +it.grams || 0;
+        if (!it.name.trim()) return toast('Ponle nombre al alimento');
+        if (!(g > 0) || !(+it.kcal > 0)) return toast('Indica gramos y kcal para guardarlo');
+        const mine = myFoodsCache.find(f => favKey(f.name) === favKey(it.name));
+        card.insertAdjacentHTML('beforeend', `<div class="item-cat">${catPickerHtml(mine?.cat || null, 'Categoría')}</div>`);
+        const box = card.querySelector('.item-cat');
+        box.querySelector('[data-catlist]').hidden = false;
+        box.querySelector('[data-catbtn]').classList.add('open');
+        const k = 100 / g;
+        bindCatPicker(box, (cat, sub) => saveProductFood({
+          name: it.name.trim(),
+          per100: { kcal: it.kcal * k, protein: it.protein * k, carbs: it.carbs * k, fat: it.fat * k, ...(it.sugar != null ? { sugar: it.sugar * k } : {}) },
+          portions: it.unitG ? [[it.unitLabel, it.unitG]] : [['ración', g]],
+        }, cat, sub), 'Categoría', { cat: mine?.cat, sub: mine?.sub, name: () => it.name });
+        return haptic();
+      }
       // ☆ en un alimento: guardarlo en Mis alimentos con sus valores por 100 g
       const fb = e.target.closest('[data-ifav]');
       if (fb) {
@@ -525,6 +547,7 @@ function itemCard(it, i) {
   return `<div class="card item" data-i="${i}">
     <div class="item-top">
       <input data-f="name" value="${esc(it.name)}" placeholder="Alimento">
+      <button class="icon-btn" data-icat="${i}" aria-label="Categoría">🏷️</button>
       <button class="icon-btn star ${isFoodFav(it.name) ? 'on' : ''}" data-ifav="${i}" aria-label="Guardar en mis alimentos">${isFoodFav(it.name) ? '★' : '☆'}</button>
       <button class="icon-btn" data-del="${i}" aria-label="Quitar alimento">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>

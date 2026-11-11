@@ -9,7 +9,7 @@ import { openSheet, closeSheet } from './sheet.js';
 
 let root;
 let aiTab = null;   // pestaña de IA que se está viendo: gemini, claude o groq
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.5.0';
 
 export function initSettings(el) {
   root = el;

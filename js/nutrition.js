@@ -213,10 +213,12 @@ function gastoNote(eaten, kSteps, kGym, d) {
   const bmr = full * frac;
   const tef = eaten * 0.1, n = v => r0(v).toLocaleString('es-ES');
   const parts = [['Metabolismo basal', bmr], ['Digestión', tef], ['Pasos', kSteps], ['Entreno', kGym]].filter(([, v]) => v >= 1);
+  const spent = bmr + tef + kSteps + kGym, bal = eaten - spent;
   return `<details class="act-note gasto">
-    <summary>Gasto del día ≈ <b>${n(bmr + tef + kSteps + kGym)}</b> kcal</summary>
+    <summary>Gasto del día ≈ <b>${n(spent)}</b> kcal</summary>
     <div class="gasto-split">${parts.map(([l, v]) => `<span>${l}<b>${n(v)}</b></span>`).join('')}</div>
-  </details>`;
+  </details>
+  ${eaten > 0 ? `<div class="act-note balance ${bal < 0 ? 'neg' : 'pos'}">Balance <b>${bal > 0 ? '+' : bal < 0 ? '−' : ''}${n(Math.abs(bal))}</b> kcal · ${bal < 0 ? 'déficit' : 'superávit'}</div>` : ''}`;
 }
 
 // Verde: ±200 kcal del objetivo · Amarillo: entre 200 y 500 · Rojo: más de 500 por arriba o por abajo

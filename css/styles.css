@@ -1137,3 +1137,7 @@ input.switch:checked::before { transform: translateX(20px); }
 .sugar-field { margin-top: 8px; }
 .sugar-field label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
 .sugar-field input { width: 90px; text-align: center; }
+.act-note.balance { margin-top: 4px; font-size: 12px; }
+.balance.neg b { color: var(--accent); }
+.balance.pos b { color: var(--orange); }
+.item-cat { margin-top: 10px; }

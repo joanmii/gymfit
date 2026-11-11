@@ -91,6 +91,17 @@ const RAW = {
     ['Pad thai', '🍜', 170, 7, 22, 6, [R.plato(350)], 'tallarines'],
     ['Gyozas', '🥟', 210, 8, 26, 8, [['unidad', 25], ['ración (6)', 150]], 'empanadillas japonesas'],
     ['Falafel', '🧆', 330, 13, 32, 18, [['unidad', 20], ['ración', 120]], ''],
+    ['Puré de verduras', '🥣', 50, 1.5, 6, 2, [R.plato(300)], 'pure crema de verduras'],
+    ['Puré de calabaza', '🎃', 45, 1, 6, 2, [R.plato(300)], 'crema de calabaza pure'],
+    ['Puré de calabacín', '🥣', 40, 1.5, 4, 2, [R.plato(300)], 'crema de calabacin pure'],
+    ['Puré de lentejas', '🥣', 90, 6, 13, 1.5, [R.plato(300)], 'crema de lentejas pure'],
+    ['Caldo de pollo', '🍲', 8, 1, 0.5, 0.3, [R.plato(300), ['taza', 250]], 'caldo casero'],
+    ['Sopa de cocido', '🍲', 30, 2, 3, 1, [R.plato(300)], 'sopa de puchero caldo'],
+    ['Sopa de verduras', '🥣', 30, 1, 4, 1, [R.plato(300)], 'sopa juliana'],
+    ['Sopa de pescado', '🍲', 40, 4, 2, 1.5, [R.plato(300)], 'sopa de marisco'],
+    ['Sopa de ajo', '🥣', 70, 3, 8, 3, [R.plato(300)], 'sopa castellana'],
+    ['Sopa de miso', '🥣', 25, 2, 3, 1, [['bol', 250]], 'sopa japonesa'],
+    ['Consomé', '🍲', 10, 1.5, 0.5, 0.3, [['taza', 250]], 'consome caldo'],
   ],
   bocatas: [
     ['Bocadillo de jamón serrano', '🥖', 255, 16, 35, 5.5, [['bocata entero', 150], ['medio bocata', 75]], 'bocata jamon'],
@@ -133,9 +144,6 @@ const RAW = {
     ['Capuchino', '☕', 45, 2.4, 3.6, 2.4, [R.taza(200)], 'cappuccino'],
     ['Colacao / cacao con leche', '🥛', 85, 3.5, 11.5, 3, [R.taza(250)], 'cola cao nesquik chocolate'],
     ['Azúcar', '🍬', 400, 0, 100, 0, [['sobre', 8], ['cucharadita', 5]], 'azucar sacarina'],
-    ['Leche entera', '🥛', 64, 3.1, 4.7, 3.6, [R.vaso(250)], ''],
-    ['Leche semidesnatada', '🥛', 46, 3.1, 4.7, 1.6, [R.vaso(250)], ''],
-    ['Leche desnatada', '🥛', 34, 3.4, 4.9, 0.1, [R.vaso(250)], ''],
     ['Bebida de avena', '🥛', 45, 1, 7, 1.5, [R.vaso(250)], 'leche de avena'],
     ['Bebida de soja', '🥛', 40, 3.3, 2.5, 1.8, [R.vaso(250)], 'leche de soja'],
     ['Batido de chocolate', '🥛', 75, 3, 11, 2, [['brik', 200]], ''],
@@ -253,6 +261,9 @@ const RAW = {
     ['Conejo', '🐇', 135, 21, 0, 5.5, [R.racion(200)], ''],
     ['Salchichas frankfurt', '🌭', 290, 12, 2, 26, [['unidad', 40]], 'salchicha'],
     ['Salchichas de pollo/pavo', '🌭', 180, 13, 4, 12.5, [['unidad', 40]], ''],
+    ['Longaniza fresca', '🌭', 270, 15, 1, 23, [['unidad', 60], ['ración', 150]], 'longanizas salchicha fresca'],
+    ['Longaniza a la brasa', '🌭', 300, 18, 1, 25, [['unidad', 55], ['ración', 150]], 'longanizas plancha'],
+    ['Longaniza blanca y negra (embutido fresco)', '🌭', 290, 13, 4, 25, [['unidad', 60]], 'longanizas morcilla blanca negra'],
   ],
   embutido: [
     ['Jamón serrano', '🥓', 240, 31, 0, 13, [['loncha', 15], ['ración', 50], ['plato', 100]], 'jamon'],
@@ -268,6 +279,7 @@ const RAW = {
     ['Morcilla', '🥓', 330, 14, 15, 24, [['rodaja', 25], ['ración', 100]], ''],
     ['Sobrasada', '🥓', 560, 14, 1, 55, [R.cuch(20)], ''],
     ['Paté', '🥓', 320, 12, 3, 29, [R.cuch(20)], 'foie'],
+    ['Longaniza de Pascua', '🥓', 430, 24, 2, 36, [['loncha', 8], ['ración', 40]], 'longaniza curada seca'],
   ],
   pescado: [
     ['Atún en lata al natural', '🐟', 110, 25, 0, 1, [['lata (escurrida)', 52]], 'atun'],
@@ -286,6 +298,9 @@ const RAW = {
     ['Surimi (palitos de cangrejo)', '🦀', 100, 8, 15, 1, [['unidad', 17]], 'palitos'],
   ],
   lacteos: [
+    ['Leche entera', '🥛', 64, 3.1, 4.7, 3.6, [R.vaso(250)], ''],
+    ['Leche semidesnatada', '🥛', 46, 3.1, 4.7, 1.6, [R.vaso(250)], ''],
+    ['Leche desnatada', '🥛', 34, 3.4, 4.9, 0.1, [R.vaso(250)], ''],
     ['Huevo', '🥚', 145, 12.5, 0.7, 10, [['unidad', 60]], 'huevos'],
     ['Huevo frito', '🍳', 196, 13.6, 0.8, 15, [['unidad', 55]], ''],
     ['Huevo cocido', '🥚', 155, 13, 1, 11, [['unidad', 55]], 'duro'],
@@ -421,6 +436,21 @@ export const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(
 
 // Azúcares por 100 g (aproximados, de tablas habituales)
 const SUGAR = {
+  'Longaniza fresca': 0.5,
+  'Longaniza a la brasa': 0.5,
+  'Longaniza blanca y negra (embutido fresco)': 1,
+  'Longaniza de Pascua': 1,
+  'Puré de verduras': 2.5,
+  'Puré de calabaza': 3,
+  'Puré de calabacín': 2,
+  'Puré de lentejas': 1.5,
+  'Caldo de pollo': 0.3,
+  'Sopa de cocido': 0.5,
+  'Sopa de verduras': 2,
+  'Sopa de pescado': 0.5,
+  'Sopa de ajo': 0.5,
+  'Sopa de miso': 1,
+  'Consomé': 0.3,
   'Tortilla de patatas': 1,
   'Tortilla francesa (2 huevos)': 0.5,
   'Huevos revueltos': 1,
@@ -804,6 +834,7 @@ export const foodsByCat = cat => FOODS.filter(f => f.cat === cat);
 // y lo que no encaja en ninguna va a «Otros». Sirve también para los alimentos que añades tú.
 export const FOOD_SUBCATS = {
   lacteos: [
+    ['leche', 'Leche', '🥛', /^leche/],
     ['huevos', 'Huevos', '🥚', /huevo|clara/],
     ['yogures', 'Yogures', '🥣', /yogur|skyr|kefir/],
     ['quesos', 'Quesos', '🧀', /queso|mozzarella/],
@@ -813,12 +844,12 @@ export const FOOD_SUBCATS = {
     ['pollo', 'Pollo y pavo', '🍗', /pollo|pavo|alitas/],
     ['ternera', 'Ternera', '🥩', /ternera|entrecot|picada|buey|vaca/],
     ['cerdo', 'Cerdo', '🐖', /cerdo|secreto|presa|iberic/],
-    ['salchichas', 'Salchichas', '🌭', /salchicha/],
+    ['salchichas', 'Salchichas y longanizas', '🌭', /salchicha|longaniza/],
     ['otras', 'Cordero y conejo', '🐑', /cordero|conejo/],
   ],
   embutido: [
     ['jamon', 'Jamón y fiambre', '🍖', /jamon|pavo|mortadela/],
-    ['curados', 'Curados', '🥓', /chorizo|salchichon|fuet|lomo|sobrasada|morcilla|bacon|panceta/],
+    ['curados', 'Curados', '🥓', /chorizo|salchichon|fuet|lomo|sobrasada|morcilla|bacon|panceta|longaniza/],
   ],
   pescado: [
     ['latas', 'Latas y conservas', '🥫', /lata|escabeche|ahumado/],
@@ -856,7 +887,7 @@ export const FOOD_SUBCATS = {
   bebidas: [
     ['alcohol', 'Cerveza, vino y copas', '🍺', /cerveza|vino|tinto|cubata|cava|vermut|sangria|agua de valencia/],
     ['refrescos', 'Zumos y refrescos', '🥤', /zumo|refresco|isotonica|energetica|kombucha|granizado/],
-    ['leche', 'Leche y batidos', '🥛', /^(leche|bebida de|batido|horchata)/],
+    ['leche', 'Bebidas vegetales y batidos', '🥛', /^(bebida de|batido|horchata)/],
     ['cafe', 'Café, cacao e infusiones', '☕', /cafe|cortado|capuchino|colacao|cacao|chocolate|te o|infusion/],
   ],
   bolleria: [
@@ -869,7 +900,8 @@ export const FOOD_SUBCATS = {
     ['huevos', 'Huevos', '🍳', /huevo|tortilla/],
     ['ensaladas', 'Ensaladas', '🥗', /ensalad|poke/],
     ['arroces', 'Arroces', '🥘', /arroz|paella|fideua/],
-    ['cuchara', 'Cuchara', '🍲', /lenteja|garbanzo|cocido|fabada|sopa|crema|gazpacho|salmorejo|callos|potaje/],
+    ['sopas', 'Sopas y purés', '🥣', /sopa|crema|pure|caldo|consome/],
+    ['cuchara', 'Cuchara', '🍲', /lenteja|garbanzo|cocido|fabada|gazpacho|salmorejo|callos|potaje/],
     ['pasta', 'Pasta', '🍝', /macarrones|espaguetis|lasana|canelones|ramen|pad thai|pasta/],
     ['carne', 'Carne y pescado', '🍗', /pollo|ternera|lomo|albondiga|merluza|salmon|all i pebre|esgarraet|cerdo/],
   ],

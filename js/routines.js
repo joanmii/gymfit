@@ -132,7 +132,7 @@ function routinesHtml() {
     <div class="action-list">
       ${TEMPLATES.map((t, i) => `<button class="action" data-template="${i}" style="--c:color-mix(in srgb,var(--accent) 22%,transparent)">
         <span class="e">${t.emoji || '📋'}</span>
-        <div>${esc(t.name)}<small>${roundMin(estimateMinutes(templateFor(t, tplMin)))} min</small></div>
+        <div>${esc(t.name)}<small>${templateFor(t, tplMin).length} ejercicios · ${roundMin(estimateMinutes(templateFor(t, tplMin)))} min</small></div>
       </button>`).join('')}
     </div>`;
 }

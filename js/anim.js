@@ -334,7 +334,7 @@ const BACK_PROPS = new Set(['bench', 'seg', 'box', 'cable']);
 function drawProps(props, J, layer) {
   let s = '';
   for (const p of props || []) {
-    if ((layer === 'back') !== (p.behind ?? BACK_PROPS.has(p.k))) continue;   // behind: detrás del cuerpo aunque no sea una máquina
+    if (layer === 'under' ? !p.under : p.under || (layer === 'back') !== (p.behind ?? BACK_PROPS.has(p.k))) continue;   // behind: detrás del cuerpo · under: también detrás de las piernas
     switch (p.k) {
       case 'bench': {
         const [x1, y1, x2, y2] = p.p;
@@ -403,7 +403,7 @@ function frame(A, ms, H, vb) {
   const J = A.v === 'front' || A.v === 'back' ? solveFront(P) : solveSide(P);
   let s = '';
   if (!A.noGround && vb) s += `<line class="g" x1="${n1(vb[0])}" y1="1" x2="${n1(vb[0] + vb[2])}" y2="1" stroke-width="2"/>` + shadow(J);
-  if (A.v === 'back') s += backLegs(J, H);       // de espaldas, las piernas quedan detrás del banco
+  if (A.v === 'back') s += drawProps(A.props, J, 'under') + backLegs(J, H);   // de espaldas: barra delante de las piernas, piernas detrás del banco
   s += drawProps(A.props, J, 'back');
   s += A.v === 'back' ? backBody(J, H) : J.front ? drawFront(J, H) : drawSide(J, H);
   s += drawProps(A.props, J, 'front');
