@@ -11,9 +11,9 @@ Identifica cada alimento y estima su peso en gramos:
 - En fotos, usa referencias visuales (plato, cubiertos, manos).
 - En descripciones, usa las cantidades que diga el usuario ("2 huevos", "un plato de lentejas", "media pizza"); si no las dice, usa una ración normal en España.
 Responde ÚNICAMENTE con JSON válido, sin texto adicional ni bloques de código, con esta forma exacta:
-{"mealName":"nombre corto del plato","confidence":"low|medium|high","items":[{"name":"","estimatedGrams":0,"calories":0,"protein":0,"carbs":0,"fat":0}]}
+{"mealName":"nombre corto del plato","confidence":"low|medium|high","items":[{"name":"","estimatedGrams":0,"calories":0,"protein":0,"carbs":0,"sugar":0,"fat":0}]}
 - Nombres en español.
-- calories en kcal; protein, carbs y fat en gramos para la cantidad estimada.
+- calories en kcal; protein, carbs, sugar (azúcares, parte de carbs) y fat en gramos para la cantidad estimada.
 - Ten en cuenta aceites, salsas y la forma de cocinado.
 - Si no hay comida en la foto o la descripción, devuelve items vacío y confidence "low".`;
 
@@ -84,6 +84,7 @@ function parseResult(text) {
       protein: +(+i.protein || 0).toFixed(1),
       carbs: +(+i.carbs || 0).toFixed(1),
       fat: +(+i.fat || 0).toFixed(1),
+      ...(i.sugar != null && i.sugar !== '' ? { sugar: +(+i.sugar || 0).toFixed(1) } : {}),
     })),
   };
 }
@@ -99,9 +100,9 @@ const thinkMap = () => { try { return JSON.parse(localStorage.getItem(THINK_KEY)
 async function gemini(parts, { json = true, maxTokens = 8192, system = SYSTEM_PROMPT, temperature = 0.2, text = false } = {}) {
   const S = state.settings;
   const key = requireKey(S.geminiKey);
-  // Fotos con el modelo principal; texto y recetas con el ligero (gasta menos y tiene más límite)
-  const model = (text ? S.geminiTextModel || 'gemini-flash-lite-latest' : S.geminiModel || 'gemini-flash-latest').trim();
-  const backup = model === GEMINI_FALLBACK ? (S.geminiModel || 'gemini-flash-latest').trim() : GEMINI_FALLBACK;
+  // Fotos y texto con Flash-Lite por defecto (rápido y con más límite diario); se pueden cambiar en Ajustes
+  const model = (text ? S.geminiTextModel : S.geminiModel)?.trim() || GEMINI_FALLBACK;
+  const backup = model === GEMINI_FALLBACK ? 'gemini-flash-latest' : GEMINI_FALLBACK;   // si el ligero falla, el normal
   const request = (m, think) => post(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
     { 'x-goog-api-key': key },

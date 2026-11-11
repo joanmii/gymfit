@@ -7,7 +7,7 @@ import { openSheet, setSheetContent, closeSheet } from './sheet.js';
 import { bodyMap, setMapSelection, PARTS, partColor } from './bodymap.js';
 import { EXERCISES, EX, EQUIPMENT, TEMPLATES, videoUrl, isCardio, variantChips, variantsOf } from './exercises.js';
 import { startWorkout, openWorkout, getActive, progressBlock } from './workout.js';
-import { GEN_GROUPS, PRESETS, generateRoutine, swapExercise, estimateMinutes, routineName, templateFor } from './generator.js';
+import { GEN_GROUPS, PRESETS, generateRoutine, swapExercise, estimateMinutes, roundMin, routineName, templateFor } from './generator.js';
 import { state, MUSCLES, M, esc, toast, haptic } from './utils.js';
 import { mountAnim, hasAnim } from './anim.js';
 
@@ -114,7 +114,7 @@ function routinesHtml() {
   const cards = list.map(r => {
     const groups = routineGroups(r);
     return `<div class="card routine" data-routine="${r.id}" role="button" tabindex="0">
-      <div class="routine-top"><b>${esc(r.name)}${r.items.length ? `<small class="rt-min">${estimateMinutes(r.items)} min</small>` : ''}</b><span class="rt-dots">${groups.map(g => `<i style="--c:${M[g].color}" title="${M[g].name}"></i>`).join('')}</span>${chev('r')}</div>
+      <div class="routine-top"><b>${esc(r.name)}${r.items.length ? `<small class="rt-min">${roundMin(estimateMinutes(r.items))} min</small>` : ''}</b><span class="rt-dots">${groups.map(g => `<i style="--c:${M[g].color}" title="${M[g].name}"></i>`).join('')}</span>${chev('r')}</div>
       ${r.items.length ? `<button class="btn small primary start" data-start="${r.id}">▶ Empezar entreno</button>` : ''}
     </div>`;
   }).join('');
@@ -132,7 +132,7 @@ function routinesHtml() {
     <div class="action-list">
       ${TEMPLATES.map((t, i) => `<button class="action" data-template="${i}" style="--c:color-mix(in srgb,var(--accent) 22%,transparent)">
         <span class="e">${t.emoji || '📋'}</span>
-        <div>${esc(t.name)}<small>${estimateMinutes(templateFor(t, tplMin))} min</small></div>
+        <div>${esc(t.name)}<small>${roundMin(estimateMinutes(templateFor(t, tplMin)))} min</small></div>
       </button>`).join('')}
     </div>`;
 }
@@ -319,7 +319,6 @@ function openEditor(existing) {
         <button class="icon-btn" data-mv="${i}" data-d="1" ${i === draft.items.length - 1 ? 'disabled' : ''} aria-label="Bajar">${arrow('M12 5v14M5 12l7 7 7-7')}</button>
         <button class="icon-btn" data-rm="${i}" aria-label="Quitar">${arrow('M6 6l12 12M18 6L6 18')}</button>
       </div>
-      ${variantChips(it.ex, `data-vi="${i}"`, true)}
       ${ex?.cardio ? `<div class="item-grid rt-grid one">
         <label>Minutos<input data-i="${i}" data-f="reps" inputmode="numeric" value="${esc(it.reps)}"></label>
       </div>` : `<div class="item-grid rt-grid">
@@ -357,12 +356,6 @@ function openEditor(existing) {
     body.addEventListener('click', async e => {
       const info = e.target.closest('[data-info]');
       if (info) return showExercise(info.dataset.info, () => setSheetContent(editorHtml(), mountEditor));
-      const vb = e.target.closest('[data-variant][data-vi]');
-      if (vb) {   // cambiar el ejercicio por otra variante, conservando series, reps y kg
-        draft.items[Number(vb.dataset.vi)].ex = vb.dataset.variant;
-        haptic();
-        return redrawItems();
-      }
       const mv = e.target.closest('[data-mv]');
       if (mv) {
         const i = Number(mv.dataset.mv), j = i + Number(mv.dataset.d);
@@ -494,7 +487,7 @@ function showGenerated(opts, formHtml, formMount) {
     return `
       <button class="link back" id="gen-back">${chev('l')} Cambiar opciones</button>
       <h2 class="sheet-title">${esc(name)}</h2>
-      <div class="muted small">≈ ${estimateMinutes(items)} min · ${items.length} ejercicios · ${sets} series</div>
+      <div class="muted small">≈ ${roundMin(estimateMinutes(items))} min · ${items.length} ejercicios · ${sets} series</div>
       ${res.warnings.map(w => `<div class="notice">${esc(w)}</div>`).join('')}
       ${items.length ? `
       <div class="card" style="margin-top:14px">${bodyMap({ primary, secondary, small: true })}</div>

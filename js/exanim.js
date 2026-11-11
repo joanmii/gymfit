@@ -45,6 +45,36 @@ const curl = (w, extraProps = []) => ({
   k: [stand({ hr: [3, -50] }), stand({ hr: [26, -26] }), stand({ hr: [12, -6] })],
 });
 
+// Dominadas de frente: colgado de una barra fija; hw = media anchura de agarre. neutral: agarres paralelos
+const pullUp = (hw, neutral = false) => ({
+  v: 'front', noGround: true,
+  props: [{ k: 'seg', p: [-52, 190, 52, 190], w: 4 }, ...(neutral ? [{ k: 'vbar', at: 'ha' }, { k: 'vbar', at: 'ha2' }] : [])],
+  k: [
+    { hip: [0, 92], an: [9, 11], ha: [hw, 188], eb: 1 },
+    { hip: [0, 122], an: [9, 41], ha: [hw, 188], eb: 1, al: hw < 20 ? 0.55 : 1 },
+  ],
+});
+// Jalón de frente: sentado en la máquina; triangle = agarre estrecho en V (asa en el centro)
+const latPull = (top, bottom, triangle = false, al = 1) => ({
+  v: 'front',
+  props: [{ k: 'seg', p: [-44, 206, 44, 206], w: 5 }, { k: 'bench', p: [-28, 46, 28, 46] },
+    { k: 'cable', from: [0, 200], at: 'mid' }, { k: triangle ? 'handle' : 'hbar', at: 'mid' },
+    { k: 'pad', at: [17, 57], r: 6 }, { k: 'pad', at: [-17, 57], r: 6 }],
+  k: [
+    { hip: [0, 52], legsFront: true, kn: [15, 48], an: [14, 6], ha: top, eb: -1 },
+    { hip: [0, 52], legsFront: true, kn: [15, 48], an: [14, 6], ha: bottom, eb: al < 1 ? 1 : -1, al },
+  ],
+});
+// Press de hombros sentado, de frente, con una mancuerna en cada mano
+const seatedPress = (bottom, top) => ({
+  v: 'front',
+  props: [{ k: 'bench', p: [-28, 46, 28, 46] }, { k: 'seg', p: [0, 46, 0, 112], w: 7 }, { k: 'db', at: 'ha' }, { k: 'db', at: 'ha2' }],
+  k: [
+    { hip: [0, 52], legsFront: true, kn: [15, 48], an: [14, 6], ha: bottom, eb: -1 },
+    { hip: [0, 52], legsFront: true, kn: [15, 48], an: [14, 6], ha: top, eb: -1 },
+  ],
+});
+
 export const ANIMS = {
   // ---------- Pecho ----------
   'press-banca': benchPress('bar'),
@@ -54,14 +84,17 @@ export const ANIMS = {
   'press-declinado': declinePress('bar'),
   'press-declinado-mancuernas': declinePress('db'),
   'press-cerrado': benchPress('bar'),
+  // Visto desde arriba: tumbado en el banco; las mancuernas empiezan juntas sobre el pecho y bajan abiertas en arco
   'aperturas': {
     v: 'front', noGround: true,
     props: [{ k: 'bench', p: [-70, 100, 30, 100], w: 22, legs: false }, { k: 'db', at: 'ha' }, { k: 'db', at: 'ha2' }],
     k: [
-      { hip: [20, 100], t: 180, an: [104, 108], ha: [-26, 112], al: 0.45 },
-      { hip: [20, 100], t: 180, an: [104, 108], ha: [-24, 160], eb: -1 },
+      { hip: [20, 100], t: 180, an: [104, 108], ha: [-27, 106], al: 0.42, eb: 1 },
+      { hip: [20, 100], t: 180, an: [104, 108], ha: [-25, 134], al: 0.75, eb: 1 },
+      { hip: [20, 100], t: 180, an: [104, 108], ha: [-22, 160], eb: 1 },
     ],
   },
+
   'cruce-poleas': {
     v: 'front',
     props: [{ k: 'seg', p: [-88, 0, -88, 192] }, { k: 'seg', p: [88, 0, 88, 192] }, { k: 'cable', from: [82, 185], at: 'ha' }, { k: 'cable', from: [-82, 185], at: 'ha2' }],
@@ -116,24 +149,14 @@ export const ANIMS = {
   },
 
   // ---------- Espalda ----------
-  'dominadas': {
-    props: [{ k: 'seg', p: [-30, 188, 50, 188], w: 3 }, { k: 'pad', at: [10, 188], r: 4 }],
-    k: [
-      { sh0: [0, 135], t: 92, ha: [10, 187], an: [-22, 12] },
-      { sh0: [-2, 171], t: 96, ha: [10, 187], an: [-20, 51], ual: 0.65 },
-    ],
-  },
-  // De frente: sentado con los muslos bajo los rodillos, barra ancha que baja hasta la parte alta del pecho
-  'jalon-pecho': {
-    v: 'front',
-    props: [{ k: 'seg', p: [-44, 206, 44, 206], w: 5 }, { k: 'bench', p: [-28, 46, 28, 46] },
-      { k: 'cable', from: [0, 200], at: 'mid' }, { k: 'hbar', at: 'mid' },
-      { k: 'pad', at: [17, 57], r: 6 }, { k: 'pad', at: [-17, 57], r: 6 }],
-    k: [
-      { hip: [0, 52], legsFront: true, kn: [15, 48], an: [14, 6], ha: [36, 148], eb: -1 },
-      { hip: [0, 52], legsFront: true, kn: [15, 48], an: [14, 6], ha: [31, 97], eb: -1 },
-    ],
-  },
+  // De frente: colgado de la barra con agarre prono abierto, sube hasta pasar la barbilla
+  'dominadas': pullUp(36),
+  'dominadas-supinas': pullUp(15),
+  'dominadas-neutras': pullUp(10, true),
+  // Jalón de frente: abierto (prono), supino estrecho y triángulo (neutro estrecho)
+  'jalon-pecho': latPull([36, 148], [31, 97]),
+  'jalon-supino': latPull([14, 150], [16, 94], false, 0.6),
+  'jalon-triangulo': latPull([5, 150], [5, 96], true, 0.6),
   'remo-barra': {
     props: [{ k: 'bar', at: 'ha' }],
     k: [{ hip: [-22, 74], t: 40, an: [0, 4], hr: [0, -50] }, { hip: [-22, 74], t: 40, an: [0, 4], ha: [-2, 78] }],
@@ -172,18 +195,14 @@ export const ANIMS = {
   },
 
   // ---------- Hombros ----------
+  // De frente: de pie, la barra sube desde la clavícula hasta estirar los brazos
   'press-militar': {
-    props: [{ k: 'bar', at: 'ha' }],
-    k: [stand({ hr: [9, 4] }), stand({ hr: [-2, 52] })],
+    v: 'front',
+    props: [{ k: 'hbar', at: 'mid' }],
+    k: [{ hip: [0, 86], an: [11, 4], ha: [27, 140], eb: -1 }, { hip: [0, 86], an: [11, 4], ha: [19, 183], eb: -1 }],
   },
-  'press-hombro-mancuernas': {
-    props: [...SEAT, { k: 'db', at: 'ha' }],
-    k: [{ hip: [0, 50], t: 95, an: [40, 4], hr: [6, 14], ual: 0.55 }, { hip: [0, 50], t: 95, an: [40, 4], hr: [1, 51] }],
-  },
-  'press-arnold': {
-    props: [...SEAT, { k: 'db', at: 'ha' }],
-    k: [{ hip: [0, 50], t: 95, an: [40, 4], hr: [13, 12] }, { hip: [0, 50], t: 95, an: [40, 4], hr: [0, 51] }],
-  },
+  'press-hombro-mancuernas': seatedPress([33, 106], [18, 150]),
+  'press-arnold': seatedPress([9, 106], [18, 150]),
   'elevaciones-laterales': {
     v: 'front',
     props: [{ k: 'db', at: 'ha' }, { k: 'db', at: 'ha2' }],
@@ -228,13 +247,13 @@ export const ANIMS = {
     ],
   },
   'curl-concentrado': {
-    // Sentado, con el codo apoyado en la cara interna del muslo, junto a la rodilla
+    // Sentado e inclinado, con el codo apoyado en la cara interna del muslo; solo se mueve el antebrazo
     one: true,
     props: [{ k: 'bench', p: [-40, 43, 10, 43] }, { k: 'db', at: 'ha' }],
     k: [
-      { hip: [-10, 49], t: 40, an: [36, 4], ha: [25, 30], hb: [34, 46] },
-      { hip: [-10, 49], t: 40, an: [36, 4], ha: [51, 53], hb: [34, 46] },
-      { hip: [-10, 49], t: 40, an: [36, 4], ha: [22, 80], hb: [34, 46] },
+      { hip: [-10, 49], t: 40, an: [36, 4], ha: [27, 30], hb: [34, 46] },
+      { hip: [-10, 49], t: 40, an: [36, 4], ha: [48, 50], hb: [34, 46] },
+      { hip: [-10, 49], t: 40, an: [36, 4], ha: [40, 72], hb: [34, 46] },
     ],
   },
   'curl-muneca': {
@@ -380,6 +399,14 @@ export const ANIMS = {
   'peso-muerto-rumano': {
     props: [{ k: 'bar', at: 'ha' }],
     k: [stand({ hr: [3, -50] }), { hip: [-26, 80], t: 22, an: [0, 4], hr: [0, -51] }],
+  },  // De frente: piernas muy abiertas, manos por dentro de las rodillas, torso más vertical
+  'peso-muerto-sumo': {
+    v: 'front',
+    props: [{ k: 'hbar', at: 'mid' }],
+    k: [
+      { hip: [0, 54], tl: 0.62, an: [36, 4], kb: 1, ha: [11, 33] },
+      { hip: [0, 81], an: [30, 4], kb: 1, ha: [12, 72] },
+    ],
   },
   'curl-femoral': {
     props: [{ k: 'bench', p: [-60, 40, 60, 40] }, { k: 'pad', at: 'an', r: 6 }],

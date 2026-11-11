@@ -10,12 +10,14 @@ import { esc, haptic, keyOf, r0, r1, toast, today } from './utils.js';
 import { renderNutrition } from './nutrition.js';
 import { ALL_TYPES, blankItem, favKey, freshBox, inType, loadImage, MEAL_TYPES, mealScore, perServing, productToFood, scoreCard, searchBuiltin, servingsOf, sumItems, toJpeg, TOOLS, TYPE, typeChips, typesOf, unitText, withBase } from './nut-core.js';
 import { isFoodFav, loadFavorites, loadFoodFavs, myDishes, myRecipes, toggleFavType, toggleFoodFav } from './nut-favs.js';
-import { mountFoodPicker, mountPortion, openFoodBrowser } from './nut-foods.js';
+import { bindCatPicker, catPickerHtml, isSavedFood, mountFoodPicker, mountPortion, openFoodBrowser, saveProductFood } from './nut-foods.js';
 
 let pendingFood = null;   // producto escaneado desde el desplegable, para abrirlo al volver
 
 export function openReview(draft, editing = false, fresh = false, inPlace = false) {
   draft.items = draft.items.map(withBase);
+  // Producto escaneado que no está en la base: botón «Categoría» para guardarlo en tus alimentos
+  if (draft.product) { draft.scanned = isSavedFood(draft.product.name) ? null : draft.product; delete draft.product; }
   const recipe = draft.mode === 'recipe';   // crear/editar una receta (con pasos, raciones…)
   const plato = draft.mode === 'plato';     // crear/editar un plato de «Mis platos»
   const own = recipe || plato;              // no es una comida: se guarda en tus platos o recetas
@@ -45,6 +47,7 @@ export function openReview(draft, editing = false, fresh = false, inPlace = fals
       <input type="file" id="rphoto-f" accept="image/*" hidden>` : draft.photo ? `<img src="${draft.photo}" alt="">` : ''}
       <label class="field"><span>Nombre</span><input id="mname" value="${esc(draft.name)}" placeholder="Ej: Pollo con arroz"></label>
     </div>
+    ${draft.scanned ? `<div class="scan-save">${catPickerHtml(null, 'Guardar en mis alimentos')}</div>` : ''}
     ${draft.confidence ? `<span class="badge ${draft.confidence}">● ${conf[draft.confidence]}</span>` : ''}
     ${draft.note ? `<div class="notice">${esc(draft.note)}</div>` : ''}
     ${own ? `<div class="label">🏷️ ¿En qué comidas aparece?</div>
@@ -78,6 +81,7 @@ export function openReview(draft, editing = false, fresh = false, inPlace = fals
     ${editing ? `<button class="btn ghost danger" id="del">${recipe ? 'Borrar receta' : plato ? 'Borrar plato' : 'Borrar comida'}</button>` : ''}
     <div class="totals">
       <div class="totals-row" id="totals"></div>
+      <div class="sugar-line" id="sugar"></div>
       <button class="btn primary" id="save">${recipe ? 'Guardar receta' : plato ? 'Guardar plato' : 'Guardar'}</button>
     </div>`;
 
@@ -168,6 +172,7 @@ export function openReview(draft, editing = false, fresh = false, inPlace = fals
   };
 
   const mount = body => {
+    if (draft.scanned) bindCatPicker(body.querySelector('.scan-save'), (cat, sub) => saveProductFood(draft.scanned, cat, sub), 'Guardar en mis alimentos', { name: () => draft.scanned.name });
     const updateTotals = () => {
       const t = draft.items.reduce((a, i) => ({ kcal: a.kcal + (+i.kcal || 0), protein: a.protein + (+i.protein || 0), carbs: a.carbs + (+i.carbs || 0), fat: a.fat + (+i.fat || 0) }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
       const n = recipe ? draft.servings : 1;   // en recetas de varias raciones se enseña lo de una
@@ -176,6 +181,11 @@ export function openReview(draft, editing = false, fresh = false, inPlace = fals
         <div><b class="p-c">${r0(t.protein / n)}g</b><span>proteína</span></div>
         <div><b class="c-c">${r0(t.carbs / n)}g</b><span>hidratos</span></div>
         <div><b class="f-c">${r0(t.fat / n)}g</b><span>grasa</span></div>`;
+      // Azúcar, discreto: solo si algún alimento lo sabe («≥» si a alguno le falta)
+      const food = draft.items.filter(i => +i.kcal > 0 || +i.carbs > 0), known = food.filter(i => i.sugar != null);
+      const su = known.reduce((a, i) => a + (+i.sugar || 0), 0) / n;
+      body.querySelector('#sugar').textContent = known.length
+        ? `de los hidratos, azúcares ${known.length < food.length ? '≥ ' : ''}${String(r1(su)).replace('.', ',')} g` : '';
       body.querySelector('#score').innerHTML = scoreCard(mealScore({ items: draft.items }));
       return t;
     };
@@ -504,6 +514,7 @@ function setItemGrams(it, card, grams, writeGrams) {
       it[key] = key === 'kcal' ? r0(it.base[key] * k) : r1(it.base[key] * k);
       card.querySelector(`[data-f="${key}"]`).value = it[key];
     }
+    if (it.base.sugar != null) it.sugar = r1(it.base.sugar * k);
   }
   const ut = card.querySelector('[data-utext]');
   if (ut) ut.innerHTML = unitText(it);

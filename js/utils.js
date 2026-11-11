@@ -60,7 +60,7 @@ const DEFAULTS = {
   height: 0,                       // cm, para calcular el IMC
   provider: 'gemini',              // 'gemini' (gratis) o 'claude' (de pago)
   geminiKey: '',
-  geminiModel: 'gemini-flash-latest',          // fotos (comida, Zepp Life)
+  geminiModel: 'gemini-flash-lite-latest',     // fotos (comida, Zepp Life): el ligero, más rápido y con más límite
   geminiTextModel: 'gemini-flash-lite-latest',  // texto y recetas: más rápido y con más límite diario
   groqKey: '',                                  // opcional: texto y recetas con Groq (gratis, muy rápido)
   groqModel: 'llama-3.3-70b-versatile',
@@ -85,7 +85,9 @@ export const state = {
 
 function loadSettings() {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+    const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+    if (s.geminiModel === 'gemini-flash-latest') s.geminiModel = DEFAULTS.geminiModel;   // el predeterminado de antes
+    return s;
   } catch {
     return { ...DEFAULTS };
   }

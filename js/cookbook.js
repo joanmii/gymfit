@@ -21,6 +21,7 @@ export function ingredientItem([name, qty, mode]) {
     protein: Math.round(p.protein * k * 10) / 10,
     carbs: Math.round(p.carbs * k * 10) / 10,
     fat: Math.round(p.fat * k * 10) / 10,
+    ...(p.sugar != null ? { sugar: Math.round(p.sugar * k * 10) / 10 } : {}),
     ...(mode === 'u' ? { unitG: ug, unitLabel: label } : {}),
   };
 }

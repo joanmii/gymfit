@@ -295,6 +295,7 @@ const INFO = [
   ]],
   ['🍽️', 'Comidas', 'var(--pink)', [
     'Apunta lo que comes con una foto, describiéndolo por voz o texto, o con el código de barras.',
+    'Con foto o descripción, los ingredientes que tengas en tus alimentos (o en la base de la app) usan esos macros; el resto los calcula la IA.',
     'Introducir a mano: elige alimentos, platos o recetas y ajusta las cantidades con − y +.',
     'El anillo de calorías se pone verde, amarillo o rojo según lo cerca que estés de tu objetivo.',
   ]],

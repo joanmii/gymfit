@@ -7,8 +7,8 @@ import { openScanner } from './barcode.js';
 import { chev } from './calendar.js';
 import { closeSheet, onSheetCleanup, openSheet, setSheetContent } from './sheet.js';
 import { addDays, esc, fmtLong, haptic, hasAiKey, hasTextAi, keyOf, r0, r1, toast, today } from './utils.js';
-import { blankItem, day, defaultType, gradeBadge, inType, loadImage, MEAL_TYPES, mealScore, newDraft, perServing, servingsOf, sumItems, toJpeg, TYPE } from './nut-core.js';
-import { loadFavorites, myDishes } from './nut-favs.js';
+import { blankItem, day, defaultType, gradeBadge, inType, loadImage, MEAL_TYPES, mealScore, newDraft, perServing, productToFood, servingsOf, sumItems, toJpeg, TYPE } from './nut-core.js';
+import { loadFavorites, myDishes, useSavedFoods } from './nut-favs.js';
 import { openReview } from './nut-review.js';
 import { browserState, openFoodBrowser, pickerState } from './nut-foods.js';
 
@@ -34,7 +34,7 @@ export function openAddMenu(inPlace = false) {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a === 'cam') { closeSheet(true); document.getElementById('photo-input').click(); }
       if (a === 'txt') openDescribe();
-      if (a === 'bar') openScanner(product => openReview(newDraft(productToDraft(product)), false, true));
+      if (a === 'bar') openScanner(product => openReview(newDraft({ ...productToDraft(product), product: productToFood(product) }), false, true));
       if (a === 'man') openReview(newDraft({ items: [blankItem()] }), false, true);
       if (a === 'list') { browserState.q = ''; browserState.tab = 'foods'; openFoodBrowser(); }
       const r = e.target.closest('[data-recent]');
@@ -178,8 +178,10 @@ async function runTextAnalysis(text) {
   try {
     const res = await analyzeText(text);
     if (!res.items.length) throw new Error('No he reconocido ninguna comida en la descripción.');
+    const { items, n } = await useSavedFoods(res.items);
     haptic();
-    openReview(newDraft({ name: res.name, confidence: res.confidence, items: res.items }), false, false, true);
+    openReview(newDraft({ name: res.name, confidence: res.confidence, items }), false, false, true);
+    if (n) toast(`${n} de ${items.length} con los macros de tus alimentos`);
   } catch (err) {
     setSheetContent(`
       <h2 class="sheet-title">No se pudo calcular</h2>
@@ -209,6 +211,7 @@ function productToDraft(p) {
       protein: r1(p.per100.protein * k),
       carbs: r1(p.per100.carbs * k),
       fat: r1(p.per100.fat * k),
+      ...(p.per100.sugar != null ? { sugar: r1(p.per100.sugar * k) } : {}),
     }],
     note: p.servingGrams ? `Ración del envase: ${p.servingLabel || grams + ' g'}. Cambia los gramos si has tomado otra cantidad.` : 'Valores para 100 g. Cambia los gramos a lo que hayas tomado.',
   };
@@ -254,8 +257,10 @@ async function runAnalysis(big, thumb, ctx) {
   try {
     const res = await analyzeFood(big, ctx);
     if (!res.items.length) throw new Error('No he encontrado comida en la foto.');
+    const { items, n } = await useSavedFoods(res.items);
     haptic();
-    openReview(newDraft({ photo: thumb, name: res.name, confidence: res.confidence, items: res.items }), false, false, true);
+    openReview(newDraft({ photo: thumb, name: res.name, confidence: res.confidence, items }), false, false, true);
+    if (n) toast(`${n} de ${items.length} con los macros de tus alimentos`);
   } catch (err) {
     setSheetContent(`
       <h2 class="sheet-title">No se pudo analizar</h2>

@@ -187,6 +187,7 @@ function parseProduct(p, code = p.code) {
       protein: +n.proteins_100g || 0,
       carbs: +n.carbohydrates_100g || 0,
       fat: +n.fat_100g || 0,
+      ...(n.sugars_100g != null && n.sugars_100g !== '' ? { sugar: +n.sugars_100g || 0 } : {}),
     },
     servingGrams: serving > 0 && serving < 2000 ? Math.round(serving) : null,
     servingLabel: p.serving_size || null,

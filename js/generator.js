@@ -58,6 +58,9 @@ export function estimateMinutes(items) {
   return Math.round(WARMUP_MIN + secs / 60);
 }
 
+// Para mostrar: redondeado a 5 minutos (25, 30, 35…)
+export const roundMin = m => Math.max(5, Math.round(m / 5) * 5);
+
 // Ejercicios disponibles para un grupo con el material elegido
 export function poolFor(group, eqs) {
   return EXERCISES.filter(e => groupsOf(e).has(group) && (!eqs || eqs.has(e.eq)));

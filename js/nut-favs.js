@@ -59,7 +59,10 @@ export async function loadFavorites() {
 // ---------- Alimentos favoritos (valores por 100 g + sus raciones) ----------
 let foodFavCache = [];
 export async function loadFoodFavs() {
-  foodFavCache = (await db.allFoodFavs()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const all = await db.allFoodFavs();
+  // Los favoritos de antes no tenían color: eran favoritos de verdad, así que pasan a amarilla
+  for (const f of all) if (f.top === undefined) { f.top = true; await db.putFoodFav(f); }
+  foodFavCache = all.sort((a, b) => a.name.localeCompare(b.name, 'es'));
   return foodFavCache;
 }
 const findFoodFav = name => { const k = favKey(name); return k ? foodFavCache.find(f => favKey(f.name) === k) : null; };
@@ -189,4 +192,61 @@ export function foodThumb(f) {
   return img && !state.settings.foodEmoji?.[f.name]
     ? `<img src="${esc(img)}" alt="" loading="lazy">`
     : `<span class="e">${foodEmoji(f)}</span>`;
+}
+
+// ---------- Ingredientes de la IA → tus alimentos ----------
+// La IA da nombre y gramos; si el alimento está en tus alimentos (creados, escaneados o con estrella)
+// o en la base de la app, se usan sus macros por 100 g en vez de los que estima la IA.
+const STOPW = new Set(['de', 'del', 'con', 'y', 'a', 'al', 'la', 'el', 'los', 'las', 'en', 'un', 'una', 'sin']);
+const RAW_W = new Set(['crudo', 'cruda', 'crudos', 'crudas', 'seco', 'seca', 'secos', 'secas', 'polvo']);
+// Palabras de más que no cambian el alimento (en la base de la app solo se aceptan estas)
+const SOFT_W = new Set(['cocido', 'cocida', 'cocinado', 'cocinada', 'plancha', 'asado', 'asada', 'hervido', 'hervida', 'natural', 'blanco', 'fresco', 'fresca', 'unidad'].map(w => w.replace(/s$/, '')));
+const stemW = w => (w.length > 4 && w.endsWith('es') ? w.slice(0, -2) : w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w);
+const toks = name => new Set(norm(name).replace(/[()/,.]/g, ' ').split(/\s+/).filter(w => w && !STOPW.has(w)).map(stemW));
+
+function matchFood(aiName) {
+  const a = toks(aiName);
+  if (!a.size) return null;
+  const aRaw = [...a].some(w => RAW_W.has(w));
+  const mine = [...myFoodsCache, ...foodFavCache];
+  const score = (f, soft) => {
+    const b = toks(f.name);
+    if (![...a].every(w => b.has(w))) return null;              // todas las palabras de la IA en el alimento
+    const extra = [...b].filter(w => !a.has(w));
+    if (!aRaw && extra.some(w => RAW_W.has(w))) return null;     // «arroz» no es «arroz (crudo)»
+    if (soft && extra.some(w => !SOFT_W.has(w))) return null;   // «arroz» no es «arroz con leche»
+    return extra.length;
+  };
+  const best = (list, maxExtra, soft = false) => list
+    .map(f => ({ f, x: score(f, soft) }))
+    .filter(c => c.x != null && c.x <= maxExtra && c.f.per100)
+    .sort((p, q) => p.x - q.x || p.f.name.length - q.f.name.length);
+  const m = best(mine, 2);
+  if (m.length) return m[0].f;
+  const b = best(FOODS, 2, true);
+  if (!b.length) return null;
+  // Dos opciones igual de parecidas con calorías muy distintas (leche entera / desnatada): mejor la IA
+  if (b[1] && b[1].x === b[0].x && Math.abs(b[1].f.per100.kcal - b[0].f.per100.kcal) > 0.2 * b[0].f.per100.kcal) return null;
+  return b[0].f;
+}
+
+// Devuelve los ingredientes con los macros de tus alimentos cuando los encuentra, y cuántos ha cambiado
+export async function useSavedFoods(items) {
+  await Promise.all([loadMyFoods(), loadFoodFavs()]);
+  let n = 0;
+  const out = items.map(it => {
+    const f = it.grams > 0 && matchFood(it.name);
+    if (!f) return it;
+    n++;
+    const k = it.grams / 100, p = f.per100;
+    const unit = f.portions?.find(([l]) => l !== '100 g');
+    return {
+      ...it, name: f.name,
+      kcal: Math.round(p.kcal * k), protein: Math.round(p.protein * k * 10) / 10,
+      carbs: Math.round(p.carbs * k * 10) / 10, fat: Math.round(p.fat * k * 10) / 10,
+      ...(p.sugar != null ? { sugar: Math.round(p.sugar * k * 10) / 10 } : {}),
+      ...(unit ? { unitG: unit[1], unitLabel: unit[0] } : {}),
+    };
+  });
+  return { items: out, n };
 }

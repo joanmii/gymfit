@@ -3,7 +3,7 @@
 // =========================================================
 import { db } from './db.js';
 import { openScanner, searchProducts, STORES } from './barcode.js';
-import { FOOD_CATS, FOODS, norm } from './foods.js';
+import { FOOD_CATS, FOODS, norm, subOf, subsOf } from './foods.js';
 import { chev } from './calendar.js';
 import { setSheetContent } from './sheet.js';
 import { cap, esc, haptic, r0, r1, saveSettings, state, toast } from './utils.js';
@@ -12,6 +12,74 @@ import { bindStarLongPress, catChips, FAV_EMPTY, favLevel, FOOD_EMOJIS, foodThum
 import { openAddMenu } from './nut-add.js';
 import { openReview } from './nut-review.js';
 import { convertToRecipe } from './nut-recipes.js';
+
+// ---------- Botón «Categoría»: al tocarlo se despliegan las categorías y eliges una ----------
+const catLabel = id => { const c = FOOD_CATS.find(x => x.id === id); return c ? `${c.emoji} ${c.name}` : '🏷️ Categoría'; };
+export const catPickerHtml = (cur, label = '') => `
+  <div class="cat-pick" data-catpick>
+    <button class="btn secondary add-toggle cat-btn" data-catbtn><span>${label ? `${label} · ` : ''}${esc(catLabel(cur))}</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    <div class="cat-list" data-catlist hidden>${FOOD_CATS.map(c => `<button class="${c.id === cur ? 'on' : ''}" data-cpick="${c.id}">${c.emoji} ${c.name}</button>`).join('')}</div>
+    <div class="chips scroll subchips cat-subs" data-subrow></div>
+  </div>`;
+// Debajo, las subcategorías de la elegida con la que se detecta por el nombre ya marcada;
+// tocar otra la fija a mano. onPick(cat, sub): sub = null si se deja la detectada.
+// opts: { cat, sub, name: () => nombre actual del alimento }
+export function bindCatPicker(el, onPick, label = '', opts = {}) {
+  let cat = opts.cat || null, sub = opts.sub || null;
+  const paintSubs = () => {
+    const row = el.querySelector('[data-subrow]');
+    if (!row) return;
+    const subs = cat ? subsOf(cat) : [];
+    if (!subs.length) { row.innerHTML = ''; return; }
+    const auto = subOf({ name: opts.name?.() || '', cat });
+    const on = sub || auto;
+    row.innerHTML = subs.map(s => `<button class="chip ${s.id === on ? 'on' : ''}" data-spick="${s.id}" style="--c:var(--accent)">${s.emoji} ${s.name}</button>`).join('');
+  };
+  paintSubs();
+  el.addEventListener('input', () => { if (!sub) paintSubs(); });   // al escribir el nombre, cambia la detectada
+  el.addEventListener('click', e => {
+    const sp = e.target.closest('[data-spick]');
+    if (sp && cat) {
+      sub = sp.dataset.spick === subOf({ name: opts.name?.() || '', cat }) ? null : sp.dataset.spick;
+      paintSubs();
+      haptic();
+      return onPick(cat, sub);
+    }
+    const box = e.target.closest('[data-catpick]');
+    if (!box) return;
+    if (e.target.closest('[data-catbtn]')) {
+      const list = box.querySelector('[data-catlist]');
+      list.hidden = !list.hidden;
+      box.querySelector('[data-catbtn]').classList.toggle('open', !list.hidden);
+      return haptic();
+    }
+    const c = e.target.closest('[data-cpick]');
+    if (!c) return;
+    box.querySelectorAll('[data-cpick]').forEach(b => b.classList.toggle('on', b === c));
+    box.querySelector('[data-catlist]').hidden = true;
+    box.querySelector('[data-catbtn]').classList.remove('open');
+    box.querySelector('[data-catbtn] span').textContent = `${label ? `${label} · ` : ''}${catLabel(c.dataset.cpick)}`;
+    if (c.dataset.cpick !== cat) sub = null;
+    cat = c.dataset.cpick;
+    paintSubs();
+    haptic();
+    onPick(cat, sub);
+  });
+}
+// Producto escaneado o de internet → «Mis alimentos» con su categoría (si ya estaba, se le cambia la categoría)
+export async function saveProductFood(food, cat, sub = null) {
+  const old = myFoodsCache.find(f => favKey(f.name) === favKey(food.name));
+  await db.putMyFood({
+    ...(old ? { id: old.id, createdAt: old.createdAt } : { createdAt: Date.now() }),
+    name: food.name, cat, ...(sub ? { sub } : {}), custom: true,
+    emoji: FOOD_CATS.find(x => x.id === cat)?.emoji || '🍽️',
+    ...(food.image ? { image: food.image } : {}), ...(food.code ? { code: food.code } : {}),
+    per100: food.per100, portions: (food.portions || []).filter(([l]) => l !== '100 g'),
+  });
+  await loadMyFoods();
+  toast(`Guardado en ${catLabel(cat)}`);
+}
+export const isSavedFood = name => FOODS.some(f => favKey(f.name) === favKey(name));
 
 // ---------- Desplegable «Añadir alimento» (dentro de la revisión de la comida) ----------
 // Se pinta dentro de `el`. ctx: { onPick(item), onManual(), onScan() }
@@ -331,7 +399,7 @@ function openFoodDetail(food) {
     <div class="emoji-grid" data-egrid hidden>${FOOD_EMOJIS.map(em => `<button data-em="${em}">${em}</button>`).join('')}</div>
     <button class="btn primary" data-fuse style="margin-top:14px">🍽️ Añadir a una comida</button>
     <div class="label">${ul === '100 g' ? 'Por 100 g' : `Por ${esc(ul)} (${r0(ug)} g)`}</div>
-    <div class="card">${macroRow(scaleFood(food, ug))}</div>
+    <div class="card">${macroRow(scaleFood(food, ug))}${p.sugar != null ? `<div class="sugar-line">de los hidratos, azúcares ${String(r1(p.sugar * ug / 100)).replace('.', ',')} g</div>` : ''}</div>
     <div class="label">Raciones</div>
     <div class="card portion-list">${portions.map(([l, g]) => nutriRow(l === '100 g' ? '100 g' : `1 ${esc(l)}`, `${r0(g)} g`, scaleFood(food, g))).join('')}</div>
     <div class="label">Puntuación</div>
@@ -393,11 +461,12 @@ function openFoodEditor(food = {}) {
     ${food.image ? `<div class="food-hero" style="margin-top:12px">${foodThumb(food)}<div><small>Datos del envase · revísalos</small></div></div>` : ''}
     <label class="field"><span>Nombre</span><input id="fname" value="${esc(food.name || '')}" placeholder="Ej: Queso fresco batido Hacendado"></label>
     <div class="label">Categoría</div>
-    <div class="chips">${FOOD_CATS.map(c => `<button class="chip ${c.id === cat ? 'on' : ''}" data-fcat="${c.id}" style="--c:var(--accent)">${c.emoji} ${c.name}</button>`).join('')}</div>
+    ${catPickerHtml(cat)}
     <div class="label">Valores por 100 g</div>
     <div class="card item"><div class="item-grid four">
       ${num('fk', 'Kcal', p.kcal != null ? r0(p.kcal) : '', '1')}${num('fp', 'Prot.', p.protein != null ? r1(p.protein) : '')}${num('fc', 'Hidr.', p.carbs != null ? r1(p.carbs) : '')}${num('ff', 'Grasa', p.fat != null ? r1(p.fat) : '')}
     </div></div>
+    <div class="card item sugar-field"><label>Azúcares por 100 g (opcional)<input id="fsu" type="number" inputmode="decimal" min="0" step="0.1" value="${p.sugar ?? ''}" placeholder="—"></label></div>
     <div class="label">Ración (opcional)</div>
     <div class="card item"><div class="item-grid two">
       <label>Nombre<input id="fpl" value="${esc(pl)}" placeholder="unidad, loncha, vaso…"></label>
@@ -405,6 +474,8 @@ function openFoodEditor(food = {}) {
     </div></div>
     <button class="btn primary" data-fsave style="margin-top:18px">${editing ? 'Guardar cambios' : 'Añadir alimento'}</button>`, body => {
     const val = id => parseFloat(String(body.querySelector('#' + id).value).replace(',', '.'));
+    let sub = food.sub || null;
+    bindCatPicker(body, (id, s) => { cat = id; sub = s; }, '', { cat, sub, name: () => body.querySelector('#fname').value });
     body.addEventListener('click', async e => {
       if (e.target.closest('[data-back]')) return editing ? openFoodDetail(food) : openFoodBrowser();
       // Escanear: rellena nombre, valores por 100 g y la ración del envase; la categoría y la unidad las eliges tú
@@ -416,12 +487,6 @@ function openFoodEditor(food = {}) {
           portions: prod.servingGrams ? [['ración', prod.servingGrams]] : [],
         }), () => openFoodEditor({ ...food, cat }));
       }
-      const c = e.target.closest('[data-fcat]');
-      if (c) {
-        cat = c.dataset.fcat;
-        body.querySelectorAll('[data-fcat]').forEach(b => b.classList.toggle('on', b === c));
-        return haptic();
-      }
       if (!e.target.closest('[data-fsave]')) return;
       const name = body.querySelector('#fname').value.trim();
       if (!name) { body.querySelector('#fname').focus(); return toast('Ponle nombre al alimento'); }
@@ -430,10 +495,10 @@ function openFoodEditor(food = {}) {
       const label = body.querySelector('#fpl').value.trim(), grams = val('fpg');
       const saved = {
         ...(editing ? { id: food.id, createdAt: food.createdAt } : { createdAt: Date.now() }),
-        name, cat, custom: true,
+        name, cat, ...(sub ? { sub } : {}), custom: true,
         emoji: FOOD_CATS.find(x => x.id === cat)?.emoji || '🍽️',
         ...(food.image ? { image: food.image } : {}), ...(food.code ? { code: food.code } : {}),
-        per100: { kcal, protein: val('fp') || 0, carbs: val('fc') || 0, fat: val('ff') || 0 },
+        per100: { kcal, protein: val('fp') || 0, carbs: val('fc') || 0, fat: val('ff') || 0, ...(val('fsu') >= 0 ? { sugar: val('fsu') } : {}) },
         portions: label && grams > 0 ? [[label, grams]] : [],
       };
       saved.id = await db.putMyFood(saved);
@@ -478,11 +543,9 @@ export function mountPortion(el, food, ctx) {
     </div>
     <div class="totals-row" data-pv style="margin-top:14px"></div>
     <button class="btn primary" data-pk="add" style="margin-top:14px">Añadir</button>
-    ${isProduct ? `<div class="save-food" data-savebox>
-      <div class="label">Guardar en mis alimentos</div>
-      <div class="chips">${FOOD_CATS.map(c => `<button class="chip" data-pcat="${c.id}" style="--c:var(--accent)">${c.emoji} ${c.name}</button>`).join('')}</div>
-    </div>` : ''}`;
+    ${isProduct ? `<div class="save-food" data-savebox style="margin-top:12px">${catPickerHtml(null, 'Guardar en mis alimentos')}</div>` : ''}`;
 
+  if (isProduct) bindCatPicker(box, (cat, sub) => saveProductFood(food, cat, sub), 'Guardar en mis alimentos', { name: () => food.name });
   const gIn = box.querySelector('[data-grams]');
   const star = box.querySelector('[data-pk="fav"]');
   const paintStar = () => {
@@ -517,20 +580,6 @@ export function mountPortion(el, food, ctx) {
       haptic();
       return paintStar();
     }
-    const pc = e.target.closest('[data-pcat]');
-    if (pc) {
-      const cat = pc.dataset.pcat;
-      await db.putMyFood({
-        name: food.name, cat, custom: true, createdAt: Date.now(),
-        emoji: FOOD_CATS.find(x => x.id === cat)?.emoji || '🍽️',
-        ...(food.image ? { image: food.image } : {}), ...(food.code ? { code: food.code } : {}),
-        per100: food.per100, portions: food.portions.filter(([l]) => l !== '100 g'),
-      });
-      await loadMyFoods();
-      box.querySelector('[data-savebox]').innerHTML = `<div class="notice" style="margin-top:14px">✓ Guardado en ${esc(FOOD_CATS.find(x => x.id === cat)?.name || '')}. Edita su ración en 🍽️ Alimentos.</div>`;
-      haptic();
-      return toast('Guardado en mis alimentos 🍽️');
-    }
     const pb = e.target.closest('[data-p]');
     if (pb) { sel = Number(pb.dataset.p); units = 1; grams = portions[sel][1]; haptic(); return paint(); }
     const ub = e.target.closest('[data-u]');
@@ -546,7 +595,8 @@ export function mountPortion(el, food, ctx) {
       const k = grams / 100;
       haptic();
       const unit = sel >= 0 && portions[sel][0] !== '100 g' ? { unitG: portions[sel][1], unitLabel: portions[sel][0] } : {};
-      ctx.onPick({ name: food.name, grams: r0(grams), kcal: r0(p.kcal * k), protein: r1(p.protein * k), carbs: r1(p.carbs * k), fat: r1(p.fat * k), ...unit });
+      ctx.onPick({ name: food.name, grams: r0(grams), kcal: r0(p.kcal * k), protein: r1(p.protein * k), carbs: r1(p.carbs * k), fat: r1(p.fat * k),
+        ...(p.sugar != null ? { sugar: r1(p.sugar * k) } : {}), ...unit });
     }
   });
   gIn.addEventListener('input', () => {

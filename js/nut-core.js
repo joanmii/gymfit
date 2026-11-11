@@ -102,7 +102,8 @@ export const newDraft = (extra = {}) => ({ date: keyOf(day), type: defaultType()
 // ---------- Revisión / edición de una comida ----------
 // Guarda una "base" por alimento para escalar macros al cambiar los gramos
 export function withBase(item) {
-  return { ...item, base: { grams: +item.grams || 0, kcal: +item.kcal || 0, protein: +item.protein || 0, carbs: +item.carbs || 0, fat: +item.fat || 0 } };
+  return { ...item, base: { grams: +item.grams || 0, kcal: +item.kcal || 0, protein: +item.protein || 0, carbs: +item.carbs || 0, fat: +item.fat || 0,
+    ...(item.sugar != null ? { sugar: +item.sugar || 0 } : {}) } };
 }
 
 // Cada pantalla del desplegable usa un contenedor nuevo para no duplicar escuchadores
@@ -121,7 +122,7 @@ export const macroRow = m => `
     <div><b class="c-c">${r1(m.carbs)}g</b><span>hidratos</span></div>
     <div><b class="f-c">${r1(m.fat)}g</b><span>grasa</span></div>
   </div>`;
-export const scaleFood = (f, g) => { const k = g / 100, p = f.per100; return { name: f.name, grams: g, kcal: p.kcal * k, protein: p.protein * k, carbs: p.carbs * k, fat: p.fat * k }; };
+export const scaleFood = (f, g) => { const k = g / 100, p = f.per100; return { name: f.name, grams: g, kcal: p.kcal * k, protein: p.protein * k, carbs: p.carbs * k, fat: p.fat * k, ...(p.sugar != null ? { sugar: p.sugar * k } : {}) }; };
 export const sumItems = items => items.reduce((a, i) => ({ kcal: a.kcal + (+i.kcal || 0), protein: a.protein + (+i.protein || 0), carbs: a.carbs + (+i.carbs || 0), fat: a.fat + (+i.fat || 0) }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
 // Chips de tipos de comida (favorito en… / aparece en…)
 export const typeChips = (on, attr) => `<div class="chips">${MEAL_TYPES.map(t =>
@@ -150,6 +151,7 @@ export function perServing(r, n = 1) {
   return (r.items || []).map(i => (k === 1 ? { ...i } : {
     ...i, grams: r1((+i.grams || 0) * k), kcal: r0((+i.kcal || 0) * k),
     protein: r1((+i.protein || 0) * k), carbs: r1((+i.carbs || 0) * k), fat: r1((+i.fat || 0) * k),
+    ...(i.sugar != null ? { sugar: r1((+i.sugar || 0) * k) } : {}),
   }));
 }
 export function loadImage(file) {

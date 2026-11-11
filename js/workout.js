@@ -6,7 +6,7 @@ import { db } from './db.js';
 import { line } from './charts.js';
 import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet, onSheetCleanup } from './sheet.js';
-import { EX, isCardio, variantChips } from './exercises.js';
+import { EX, isCardio } from './exercises.js';
 import { PARTS, partColor } from './bodymap.js';
 import { mountLibrary, renderRoutines, showExercise, groupPills } from './routines.js';
 import { refreshBodyWeight, workoutKcal } from './energy.js';
@@ -147,7 +147,6 @@ function itemHtml(it, x, all) {
       <button class="icon-btn" data-mvex="${x}" data-d="1" ${x === total - 1 ? 'disabled' : ''} aria-label="Bajar">${ARROW_DOWN}</button>
       <button class="icon-btn" data-rmex="${x}" aria-label="Quitar ejercicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    ${variantChips(it.ex, `data-vx="${x}"`, true)}
     ${ex.cardio
       ? `<div class="wk-row wk-hdr"><span></span><span class="span2">Minutos${it.target ? ` · ${esc(it.target)}` : ''}</span><span></span></div>`
       : `<div class="wk-row wk-hdr"><span>Serie</span><span>Kg</span><span>Reps${it.target ? ` · ${esc(it.target)}` : ''}</span><span></span></div>`}
@@ -234,11 +233,6 @@ function mountWorkout(body, s) {
   body.addEventListener('click', async e => {
     const info = e.target.closest('[data-info]');
     if (info) return showExercise(info.dataset.info, () => setSheetContent(workoutHtml(s), b => mountWorkout(b, s)));
-    const vb = e.target.closest('[data-variant][data-vx]');
-    if (vb) {   // otra variante del ejercicio: se quedan las series apuntadas
-      s.items[Number(vb.dataset.vx)].ex = vb.dataset.variant;
-      save(); haptic(); return redraw();
-    }
     const d = e.target.closest('[data-done]');
     if (d) {
       const [x, k] = d.dataset.done.split('-').map(Number);
