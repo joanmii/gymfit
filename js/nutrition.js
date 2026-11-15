@@ -10,7 +10,7 @@ import { closeSheet, openSheet } from './sheet.js';
 import { basalKcal, dayWorkout, refreshBodyWeight, stepsKcal, stepsKm } from './energy.js';
 import { addDays, cap, esc, fmtLong, haptic, keyOf, r0, r1, state, toast, today, WD_SHORT } from './utils.js';
 import { day, gradeBadge, MACRO_COLORS, MEAL_TYPES, mealScore, newDraft, setDay, sum } from './nut-core.js';
-import { favCache, loadFavorites } from './nut-favs.js';
+import { favCache, FOOD_EMOJIS, loadFavorites } from './nut-favs.js';
 import { openAddMenu, startPhotoFlow } from './nut-add.js';
 import { openReview } from './nut-review.js';
 import { openRecipe, openRecipeAI, openRecipeEditor, renderRecipes } from './nut-recipes.js';
@@ -60,6 +60,13 @@ export function initNutrition(el) {
     const rd = e.target.closest('[data-rdef]');
     if (rd) return openRecipe(BUILTIN.find(r => r.key === rd.dataset.rdef));
     if (e.target.closest('[data-rnew]')) return openRecipeEditor({}, false, false);
+    const me = e.target.closest('[data-memoji]');
+    if (me) {
+      const all = await db.mealsByDate(keyOf(day));
+      const m = all.find(x => x.id === Number(me.dataset.memoji));
+      if (m) pickMealEmoji(m);
+      return;
+    }
     const meal = e.target.closest('[data-meal]');
     if (meal) {
       const all = await db.mealsByDate(keyOf(day));
@@ -235,9 +242,27 @@ function macroBar(name, value, goal, color) {
   </div>`;
 }
 
+// Emoji de una comida sin foto (por defecto, el del tipo: ☕ desayuno, 🍽️ comida…)
+function pickMealEmoji(m) {
+  const def = MEAL_TYPES.find(t => t.id === m.type)?.emoji || '🍽️';
+  openSheet(`
+    <h2 class="sheet-title">${esc(m.name)}</h2>
+    <div class="emoji-grid">${[def, ...FOOD_EMOJIS.filter(x => x !== def)].map(em => `<button data-pem="${em}" class="${(m.emoji || def) === em ? 'on' : ''}">${em}</button>`).join('')}</div>`, body => {
+    body.addEventListener('click', async e => {
+      const b = e.target.closest('[data-pem]');
+      if (!b) return;
+      if (b.dataset.pem === def) delete m.emoji; else m.emoji = b.dataset.pem;
+      await db.putMeal(m);
+      haptic();
+      closeSheet();
+      renderNutrition();
+    });
+  });
+}
+
 function mealRow(m) {
   return `<button class="meal" data-meal="${m.id}">
-    ${m.photo ? `<img src="${m.photo}" alt="">` : `<div class="ph">${MEAL_TYPES.find(t => t.id === m.type)?.emoji || '🍽️'}</div>`}
+    ${m.photo ? `<img src="${m.photo}" alt="">` : `<span class="ph" data-memoji="${m.id}" aria-label="Cambiar emoji">${m.emoji || MEAL_TYPES.find(t => t.id === m.type)?.emoji || '🍽️'}</span>`}
     <div class="info">
       <div class="name">${esc(m.name)}</div>
       <div class="mac"><span><b class="p-c">P</b> ${r0(m.protein)}g</span><span><b class="c-c">H</b> ${r0(m.carbs)}g</span><span><b class="f-c">G</b> ${r0(m.fat)}g</span></div>

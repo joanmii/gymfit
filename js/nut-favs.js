@@ -144,7 +144,10 @@ export const catChips = cur => FOOD_CATS_ALL.map(c => `<button class="chip ${c.i
 
 // Categoría de un favorito (los antiguos no la guardaban: se busca en la base)
 const favCat = f => f.cat || knownFood(f.name)?.cat || 'otros';
-const catFoods = cat => [...myFoodsCache.filter(f => f.cat === cat), ...foodsByCat(cat)];
+const catFoods = cat => {
+  const mine = new Set(myFoodsCache.map(f => favKey(f.name)));
+  return [...myFoodsCache.filter(f => f.cat === cat), ...foodsByCat(cat).filter(f => !mine.has(favKey(f.name)))];
+};
 // Segunda fila de chips: subcategorías de la categoría, o en ⭐ Favoritos los tipos de alimento que tienes
 export function subChips(cat, cur) {
   const subs = cat === 'fav'

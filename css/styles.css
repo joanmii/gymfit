@@ -619,6 +619,10 @@ h3 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
 .bm-m { fill: var(--bm-muscle); stroke: var(--bm-line); stroke-width: 1.1; stroke-linejoin: round; transition: fill .25s; }
 .bm-m.s { fill: color-mix(in srgb, var(--c) 45%, var(--bm-muscle)); }
 .bm-m.p { fill: var(--c); }
+.bm-m.z { fill: color-mix(in srgb, var(--c) 32%, var(--bm-muscle)); }
+.bm-hint-row { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+.bm-subs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 2px; }
+.bm-subs .chip { padding: 5px 11px; font-size: 13px; }
 .bodymap.interactive .bm-m { cursor: pointer; }
 @media (hover: hover) { .bodymap.interactive .bm-m:not(.p):hover { fill: color-mix(in srgb, var(--c) 35%, var(--bm-muscle)); } }
 .bodymap.small .bm-fig svg { max-height: 220px; }
@@ -712,6 +716,8 @@ a.btn { text-decoration: none; color: var(--text); }
 
 .wk-head { display: flex; align-items: center; gap: 12px; }
 .wk-title { flex: 1; min-width: 0; }
+.wk-timer { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: #fff; flex: none; }
+.wk-timer svg { width: 22px; height: 22px; }
 .wk-title b { font-family: var(--rounded); color: var(--text); font-variant-numeric: tabular-nums; }
 .wk-bar { margin: 12px 0 14px; height: 6px; }
 .wk-bar > i { transition: width .4s var(--spring); animation: none; }
@@ -929,9 +935,11 @@ button.act:active { transform: scale(.98); }
 .food-hero small { display: block; font-size: 13px; color: var(--muted); margin-top: 4px; }
 .fh-emoji { border: 0; padding: 0; background: none; flex: none; border-radius: 16px; }
 .fh-emoji:active { transform: scale(.94); }
+.ficha-cat { margin-top: 12px; }
+.ficha-cat .cat-btn { margin: 0; }
 .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin: 10px 0 4px; padding: 8px; border-radius: 14px; background: var(--card2); }
 .emoji-grid button { border: 0; background: none; font-size: 24px; aspect-ratio: 1; border-radius: 10px; padding: 0; }
-.emoji-grid button:active { background: var(--card3); }
+.emoji-grid button:active, .emoji-grid button.on { background: var(--card3); }
 .tab { position: relative; }
 .tab.dot::after { content: ''; position: absolute; top: 9px; left: calc(50% + 10px); width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
 .due { color: var(--orange); font-weight: 600; }

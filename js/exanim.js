@@ -336,6 +336,14 @@ export const ANIMS = {
       { sh0: [0, 134], t: 95, ha: [10, 187], an: [80, 86] },
     ],
   },
+  'elevacion-piernas-suelo': {
+    dur: 1150,   // recorrido largo: más despacio para que no vaya a tirones
+    k: [
+      { hip: [0, 8], t: 180, an: [81.5, 6], ft: 0, ha: [-1, 6], eb: 1 },
+      { hip: [0, 8], t: 180, an: [58, 57], ft: 45, ha: [-1, 6], eb: 1 },
+      { hip: [0, 8], t: 180, an: [10, 89], ft: 90, ha: [-1, 6], eb: 1 },
+    ],
+  },
   'rueda-abdominal': {
     props: [{ k: 'wheel', at: 'ha' }],
     k: [
@@ -434,6 +442,13 @@ export const ANIMS = {
     k: [
       { prone: true, hip: [10, 47], t: 180, an: [90, 49], ha: [-58, 34], eb: 1, ft: 0, kb: -1 },
       { prone: true, hip: [10, 47], t: 180, an: [38, 85], ha: [-58, 34], eb: 1, ft: 0, kb: -1 },
+    ],
+  },
+  'curl-femoral-pie': {
+    props: [{ k: 'seg', p: [34, 0, 34, 120], w: 6 }, { k: 'pad', at: 'an', r: 6 }],
+    k: [
+      { hip: [-2, 84], t: 78, an: [-3, 6], an2: [0, 4], ha: [30, 112] },
+      { hip: [-2, 84], t: 78, an: [-38, 46], an2: [0, 4], ha: [30, 112] },
     ],
   },
   'aductores-maquina': {

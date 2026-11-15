@@ -20,7 +20,8 @@ export const PARTS = {
   'biceps':        { name: 'Bíceps',                  group: 'biceps' },
   'antebrazo':     { name: 'Antebrazo',               group: 'biceps' },
   'triceps':       { name: 'Tríceps',                 group: 'triceps' },
-  'abdominales':   { name: 'Abdominales',             group: 'abdomen' },
+  'abdominales':   { name: 'Abdomen superior',        group: 'abdomen' },
+  'abd-inf':       { name: 'Abdomen inferior',        group: 'abdomen' },
   'oblicuos':      { name: 'Oblicuos',                group: 'abdomen' },
   'gluteos':       { name: 'Glúteos',                 group: 'gluteos' },
   'cuadriceps':    { name: 'Cuádriceps',              group: 'piernas' },
@@ -29,6 +30,17 @@ export const PARTS = {
   'gemelos':       { name: 'Gemelos',                 group: 'piernas' },
 };
 export const partColor = id => M[PARTS[id]?.group]?.color || 'var(--accent)';
+
+// Zonas que en el mapa se tocan como un solo músculo; una vez elegida, se afina tocando cada parte
+export const ZONES = {
+  pecho:   { name: 'Pecho',   parts: ['pecho-sup', 'pecho-med', 'pecho-inf'] },
+  hombros: { name: 'Hombros', parts: ['deltoide-ant', 'deltoide-lat', 'deltoide-post'] },
+  espalda: { name: 'Espalda', parts: ['trapecio', 'dorsal', 'espalda-media', 'lumbar'] },
+  abdomen: { name: 'Abdomen', parts: ['abdominales', 'abd-inf', 'oblicuos'] },
+};
+const ZONE_OF = Object.fromEntries(Object.entries(ZONES).flatMap(([z, v]) => v.parts.map(p => [p, z])));
+export const zoneOf = id => ZONE_OF[id] || null;
+export const zoneColor = z => partColor(ZONES[z]?.parts[0]);
 
 // ---------- Dibujo (viewBox 200 × 420, centro en x = 100) ----------
 const HEAD = '<ellipse class="bm-skin" cx="100" cy="30" rx="15" ry="20"/>';
@@ -54,7 +66,8 @@ const FRONT = [
   ['pecho-inf',    'M99 109.5 C88 108 75 106.5 62.6 105 C70 116 86 122 99 121 Z'],
   ['biceps',       ARM_UPPER],
   ['antebrazo',    FOREARM],
-  ['abdominales',  'M85 125 h13.5 v17 h-13.5 Z M85 145 h13.5 v17 h-13.5 Z M85.5 165 h13 v17 h-13 Z M86 185 h12.5 v24 C93 207 88 200 86 192 Z'],
+  ['abdominales',  'M85 125 h13.5 v17 h-13.5 Z M85 145 h13.5 v17 h-13.5 Z'],
+  ['abd-inf',      'M85.5 165 h13 v17 h-13 Z M86 185 h12.5 v24 C93 207 88 200 86 192 Z'],
   ['oblicuos',     'M82.5 124 C76 122 70 118 66 114 C68 130 70 150 72 166 C72 178 70 188 70 194 C76 196 81 194 83.5 190 C82.5 168 82.5 146 82.5 124 Z'],
   ['cuadriceps',   'M66 208 C61 232 61 264 69 297 C75 302 83 302 88 296 C88 276 88 256 87 236 C84 226 76 214 66 208 Z'],
   ['aductores',    'M90 226 C95 228 98 232 98 238 C96 254 93 268 90 282 C89 266 89 246 90 226 Z'],
@@ -90,10 +103,16 @@ function figure(paths, label, look) {
   </figure>`;
 }
 
-// primary / secondary: músculos a resaltar (fuerte / suave). selected: músculo elegido en el mapa.
-export function bodyMap({ primary = [], secondary = [], selected = null, interactive = false, small = false } = {}) {
+// Clase de cada músculo según lo elegido: la zona entera, o una parte (y el resto de la zona en suave)
+const selCls = (id, selected, zone) => {
+  if (zone && zoneOf(id) === zone) return !selected ? 'p' : id === selected ? 'p' : 'z';
+  return id === selected ? 'p' : '';
+};
+
+// primary / secondary: músculos a resaltar (fuerte / suave). selected / zone: lo elegido en el mapa.
+export function bodyMap({ primary = [], secondary = [], selected = null, zone = null, interactive = false, small = false } = {}) {
   const look = id => ({
-    cls: id === selected || primary.includes(id) ? 'p' : secondary.includes(id) ? 's' : '',
+    cls: selCls(id, selected, zone) || (primary.includes(id) ? 'p' : secondary.includes(id) ? 's' : ''),
   });
   return `<div class="bodymap ${interactive ? 'interactive' : ''} ${small ? 'small' : ''}">
     ${figure(FRONT, 'Delante', look)}${figure(BACK, 'Detrás', look)}
@@ -101,6 +120,10 @@ export function bodyMap({ primary = [], secondary = [], selected = null, interac
 }
 
 // Cambia el músculo resaltado de un mapa ya pintado (sin volver a dibujarlo)
-export function setMapSelection(el, selected) {
-  el.querySelectorAll('.bm-m').forEach(p => p.classList.toggle('p', p.dataset.m === selected));
+export function setMapSelection(el, selected, zone = null) {
+  el.querySelectorAll('.bm-m').forEach(p => {
+    const c = selCls(p.dataset.m, selected, zone);
+    p.classList.toggle('p', c === 'p');
+    p.classList.toggle('z', c === 'z');
+  });
 }

@@ -509,6 +509,7 @@ export function openReview(draft, editing = false, fresh = false, inPlace = fals
         type: draft.type,
         name: m.name,
         photo: draft.photo,
+        ...(draft.emoji && !draft.photo ? { emoji: draft.emoji } : {}),
         confidence: draft.confidence,
         items: m.items,
         kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat,

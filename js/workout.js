@@ -10,6 +10,7 @@ import { EX, isCardio } from './exercises.js';
 import { PARTS, partColor } from './bodymap.js';
 import { mountLibrary, renderRoutines, showExercise, groupPills } from './routines.js';
 import { refreshBodyWeight, workoutKcal } from './energy.js';
+import { openTimer } from './timer.js';
 import { state, MUSCLES, M, keyOf, today, fromKey, esc, toast, haptic } from './utils.js';
 
 // El entreno en curso se guarda aquí a cada cambio, así no se pierde si cierras la hoja o la app
@@ -71,7 +72,7 @@ export function progressBlock(exId) {
 // ---------- Empezar / continuar ----------
 function newItem(exId, plan = {}) {
   const last = exHistory(exId).at(-1)?.sets || [];
-  const n = isCardio(exId) ? Math.max(1, parseInt(plan.sets, 10) || 1) : Math.max(1, parseInt(plan.sets, 10) || last.length || 3);
+  const n = isCardio(exId) ? 1 : Math.max(1, parseInt(plan.sets, 10) || last.length || 3);   // cardio: los minutos de una vez
   return {
     ex: exId,
     target: plan.reps ? String(plan.reps) : '',
@@ -176,6 +177,7 @@ function workoutHtml(s) {
     <div class="wk-head">
       <div class="wk-title"><h2 class="sheet-title">${esc(s.name)}</h2>
         <span class="muted small">⏱ <b id="wk-clock">${fmtClock(Date.now() - s.startedAt)}</b> · <span id="wk-count">${p.done}/${p.total}</span> series</span></div>
+      <button class="icon-btn wk-timer" id="wk-timer" aria-label="Temporizador"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V10M10 3h4M18.5 6.5l1.5-1.5"/></svg></button>
       <button class="btn small primary" id="wk-finish">Terminar</button>
     </div>
     <div id="wk-groups">${groupPills(s)}</div>
@@ -280,6 +282,7 @@ function mountWorkout(body, s) {
       s.items.splice(x, 1); save(); return redraw();
     }
     if (e.target.closest('#wk-addex')) return openPicker(s);
+    if (e.target.closest('#wk-timer')) return openTimer(() => setSheetContent(workoutHtml(s), b => mountWorkout(b, s)));
     if (e.target.closest('#wk-freeset')) { (s.free ||= []).push({ done: false }); save(); haptic(); return redraw(); }
     if (e.target.closest('[data-rmfree]')) { s.free.pop(); save(); return redraw(); }
     const fd = e.target.closest('[data-freedone]');
@@ -299,7 +302,7 @@ function mountWorkout(body, s) {
   });
 }
 
-const pickFilter = { muscle: null, eq: null, q: '' };
+const pickFilter = { zone: null, muscle: null, eq: null, q: '' };
 function openPicker(s) {
   const back = () => setSheetContent(workoutHtml(s), b => mountWorkout(b, s));
   setSheetContent(`
@@ -370,8 +373,7 @@ async function finishWorkout(s) {
     </div>
     <div class="burn-line">🔥 ≈ <b>${kcal}</b> kcal quemadas</div></div>
     ${prs.length ? `<div class="section-label">Nuevos récords</div>${prs.map(r => `<div class="alert pr"><span class="e">🏆</span><div><b>${esc(EX[r.ex].name)}</b>: ${fmtKg(r.kg)} kg <span class="muted">(antes ${fmtKg(prevBest[r.ex].kg)} kg)</span></div></div>`).join('')}` : ''}
-    <div class="muted small" style="text-align:center;margin:10px 0 16px">Guardado en el calendario 📅</div>
-    <button class="btn primary" id="wk-close">Cerrar</button>`, body => {
+    <button class="btn primary" id="wk-close" style="margin-top:16px">Cerrar</button>`, body => {
     body.querySelector('#wk-close').addEventListener('click', () => closeSheet());
   });
 }

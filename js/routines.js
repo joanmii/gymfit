@@ -4,7 +4,7 @@
 import { db } from './db.js';
 import { chev } from './calendar.js';
 import { openSheet, setSheetContent, closeSheet } from './sheet.js';
-import { bodyMap, setMapSelection, PARTS, partColor } from './bodymap.js';
+import { bodyMap, setMapSelection, PARTS, partColor, ZONES, zoneOf, zoneColor } from './bodymap.js';
 import { EXERCISES, EX, EQUIPMENT, TEMPLATES, videoUrl, isCardio, variantChips, variantsOf } from './exercises.js';
 import { startWorkout, openWorkout, getActive, progressBlock } from './workout.js';
 import { GEN_GROUPS, PRESETS, generateRoutine, swapExercise, estimateMinutes, roundMin, routineName, templateFor } from './generator.js';
@@ -21,8 +21,8 @@ let tab = 'routines';                           // 'routines' | 'library'
 const TPL_KEY = 'gymfit-tplmin';
 let tplMin = 0;                                 // minutos para adaptar las plantillas (0 = como vienen)
 try { tplMin = Number(localStorage.getItem(TPL_KEY)) || 0; } catch { /* nada */ }
-const libFilter = { muscle: null, eq: null, q: '' };   // filtros de la pestaña Ejercicios
-const pickFilter = { muscle: null, eq: null, q: '' };  // filtros al añadir a una rutina
+const libFilter = { zone: null, muscle: null, eq: null, q: '' };   // filtros de la pestaña Ejercicios
+const pickFilter = { zone: null, muscle: null, eq: null, q: '' };  // filtros al añadir a una rutina
 
 export function initRoutines(el) {
   root = el;
@@ -114,7 +114,7 @@ function routinesHtml() {
   const cards = list.map(r => {
     const groups = routineGroups(r);
     return `<div class="card routine" data-routine="${r.id}" role="button" tabindex="0">
-      <div class="routine-top"><b>${esc(r.name)}${r.items.length ? `<small class="rt-min">${roundMin(estimateMinutes(r.items))} min</small>` : ''}</b><span class="rt-dots">${groups.map(g => `<i style="--c:${M[g].color}" title="${M[g].name}"></i>`).join('')}</span>${chev('r')}</div>
+      <div class="routine-top"><b>${esc(r.name)}${r.items.length ? `<small class="rt-min">${r.items.length} ejercicios · ${roundMin(estimateMinutes(r.items))} min</small>` : ''}</b><span class="rt-dots">${groups.map(g => `<i style="--c:${M[g].color}" title="${M[g].name}"></i>`).join('')}</span>${chev('r')}</div>
       ${r.items.length ? `<button class="btn small primary start" data-start="${r.id}">▶ Empezar entreno</button>` : ''}
     </div>`;
   }).join('');
@@ -143,13 +143,19 @@ const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 function filterExercises(f) {
   const q = norm(f.q.trim());
   const list = EXERCISES.filter(e => (!f.eq || e.eq === f.eq) && (!q || norm(e.name).includes(q)));
-  if (!f.muscle) return list;
-  return list.filter(e => e.p.includes(f.muscle) || e.s.includes(f.muscle))
-    .sort((a, b) => b.p.includes(f.muscle) - a.p.includes(f.muscle));
+  const want = selParts(f);
+  if (!want) return list;
+  const hit = ids => ids.some(id => want.includes(id));
+  return list.filter(e => hit(e.p) || hit(e.s)).sort((a, b) => hit(b.p) - hit(a.p));
 }
+// Nombre corto dentro de su zona: «Pecho superior» → «Superior»
+const subLabel = id => PARTS[id].name.replace(/^(Pecho|Abdomen|Deltoides) (\w)/, (_, z, c) => c.toUpperCase());
+// Músculos que cuentan con lo elegido en el mapa: una parte, toda una zona o nada
+const selParts = f => (f.muscle ? [f.muscle] : f.zone ? ZONES[f.zone].parts : null);
 
 function exRow(e, f, pick) {
-  const tag = f.muscle ? (e.p.includes(f.muscle) ? '<span class="zone-tag p">Principal</span>' : '<span class="zone-tag s">Secundario</span>') : '';
+  const want = selParts(f);
+  const tag = want ? (e.p.some(id => want.includes(id)) ? '<span class="zone-tag p">Principal</span>' : '<span class="zone-tag s">Secundario</span>') : '';
   return `<button class="ex-row" data-ex="${e.id}">
     <span class="ex-ico" style="--c:${exColor(e)}">${EQ_EMOJI[e.eq] || '🏋️'}</span>
     <span class="info"><b>${esc(e.name)}</b><small>${e.cardio ? 'Cardio · en minutos' : `${EQUIPMENT[e.eq]} · ${exMuscles(e)}`}</small></span>
@@ -162,7 +168,7 @@ function exRow(e, f, pick) {
 export function mountLibrary(el, f, onPick, pick = false, onInfo = null) {
   el.insertAdjacentHTML('beforeend', `
     <div class="card bm-card">
-      ${bodyMap({ interactive: true, selected: f.muscle })}
+      ${bodyMap({ interactive: true, selected: f.muscle, zone: f.zone })}
       <div class="bm-hint" id="bm-hint"></div>
     </div>
     <input class="search" type="search" aria-label="Buscar ejercicio" autocomplete="off" value="${esc(f.q)}">
@@ -174,12 +180,17 @@ export function mountLibrary(el, f, onPick, pick = false, onInfo = null) {
 
   const draw = () => {
     const list = filterExercises(f);
-    el.querySelector('#bm-hint').innerHTML = f.muscle
-      ? `<i style="--c:${partColor(f.muscle)}"></i><b>${PARTS[f.muscle].name}</b><span>${list.length} ${list.length === 1 ? 'ejercicio' : 'ejercicios'}</span><button class="link" data-clear>Quitar</button>`
-      : '<span>Toca un músculo para ver sus ejercicios</span>';
+    const count = `<span>${list.length} ${list.length === 1 ? 'ejercicio' : 'ejercicios'}</span><button class="link" data-clear>Quitar</button>`;
+    const subs = f.zone ? `<div class="bm-subs">${['', ...ZONES[f.zone].parts].map(id =>
+      `<button class="chip ${(f.muscle || '') === id ? 'on' : ''}" data-sub="${id}" style="--c:${zoneColor(f.zone)}">${id ? subLabel(id) : 'Todo'}</button>`).join('')}</div>` : '';
+    el.querySelector('#bm-hint').innerHTML = f.zone
+      ? `<div class="bm-hint-row"><i style="--c:${zoneColor(f.zone)}"></i><b>${f.muscle ? PARTS[f.muscle].name : ZONES[f.zone].name}</b>${count}</div>${subs}`
+      : f.muscle
+        ? `<i style="--c:${partColor(f.muscle)}"></i><b>${PARTS[f.muscle].name}</b>${count}`
+        : '<span>Toca un músculo para ver sus ejercicios</span>';
 
     let html;
-    if (f.muscle || f.q.trim()) {
+    if (selParts(f) || f.q.trim()) {
       html = list.map(e => exRow(e, f, pick)).join('');
     } else {
       // Sin músculo elegido: por grupos. Con un material elegido, todos a la vista;
@@ -200,13 +211,16 @@ export function mountLibrary(el, f, onPick, pick = false, onInfo = null) {
 
   el.addEventListener('click', e => {
     const m = e.target.closest('[data-m]');
+    const pickSel = (zone, muscle) => { f.zone = zone; f.muscle = muscle; setMapSelection(el, muscle, zone); haptic(); draw(); };
     if (m) {
-      f.muscle = f.muscle === m.dataset.m ? null : m.dataset.m;
-      setMapSelection(el, f.muscle);
-      haptic();
-      return draw();
+      const id = m.dataset.m, z = zoneOf(id);
+      if (!z) return pickSel(null, f.muscle === id ? null : id);
+      if (f.zone !== z) return pickSel(z, null);              // primer toque: toda la zona
+      return pickSel(z, f.muscle === id ? null : id);         // dentro de la zona: una parte (otra vez: la zona)
     }
-    if (e.target.closest('[data-clear]')) { f.muscle = null; setMapSelection(el, null); return draw(); }
+    const sb = e.target.closest('[data-sub]');
+    if (sb) return pickSel(f.zone, sb.dataset.sub || null);
+    if (e.target.closest('[data-clear]')) return pickSel(null, null);
     const grp = e.target.closest('[data-grp]');
     if (grp) {
       const open = f.open ||= new Set(), id = grp.dataset.grp;

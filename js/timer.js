@@ -32,12 +32,14 @@ const keepAwake = async on => {
   } catch { lock = null; }
 };
 
-export function openTimer() {
+// back: volver a la pantalla de antes (el entreno en curso) en vez de abrir una hoja nueva
+export function openTimer(back = null) {
   const c = cfg();
   const row = (k, label) => `
     <div class="rc-meta-row"><span>${label}</span>
       <div class="stepper"><button class="icon-btn" data-tv="${k}" data-d="-1" aria-label="Menos">−</button><b data-tvv="${k}">${show(k, c[k])}</b><button class="icon-btn" data-tv="${k}" data-d="1" aria-label="Más">+</button></div></div>`;
-  openSheet(`
+  (back ? setSheetContent : openSheet)(`
+    ${back ? `<button class="link back" data-tback>‹ Volver al entreno</button>` : ''}
     <h2 class="sheet-title">⏱️ Temporizador</h2>
     <div class="card rc-meta tm-set">${row('sets', 'Series')}${row('work', 'Tiempo')}${row('rest', 'Descanso')}</div>
     <div class="tm-total" data-ttot>${mmss(total(c))}</div>
@@ -53,12 +55,13 @@ export function openTimer() {
         saveSettings();
         return haptic();
       }
-      if (e.target.closest('[data-tstart]')) { unlockAudio(); run(c); }
+      if (e.target.closest('[data-tback]')) return back();
+      if (e.target.closest('[data-tstart]')) { unlockAudio(); run(c, back); }
     });
   });
 }
 
-function run(c) {
+function run(c, back = null) {
   // Tramos: 3 s para prepararte, luego serie / descanso / serie…
   const phases = [{ kind: 'ready', dur: 3 }];
   for (let i = 1; i <= c.sets; i++) {
@@ -104,11 +107,11 @@ function run(c) {
           <div class="muted">${c.sets} ${c.sets === 1 ? 'serie' : 'series'} · ${mmss(total(c))}</div></div>
         <button class="btn primary" data-tagain style="margin-top:18px">🔄 Repetir</button>
         <button class="btn secondary" data-tedit>⚙️ Cambiar tiempos</button>
-        <button class="btn ghost" data-tclose>Cerrar</button>`, b2 => {
+        <button class="btn ghost" data-tclose>${back ? 'Volver al entreno' : 'Cerrar'}</button>`, b2 => {
         b2.addEventListener('click', e => {
-          if (e.target.closest('[data-tagain]')) { unlockAudio(); return run(c); }
-          if (e.target.closest('[data-tedit]')) return openTimer();
-          if (e.target.closest('[data-tclose]')) return closeSheet();
+          if (e.target.closest('[data-tagain]')) { unlockAudio(); return run(c, back); }
+          if (e.target.closest('[data-tedit]')) return openTimer(back);
+          if (e.target.closest('[data-tclose]')) return back ? back() : closeSheet();
         });
       });
     };
@@ -146,7 +149,7 @@ function run(c) {
         $('[data-tpaused]').hidden = paused == null;
         return haptic();
       }
-      if (e.target.closest('[data-tstop]')) { clearInterval(timer); keepAwake(false); return openTimer(); }
+      if (e.target.closest('[data-tstop]')) { clearInterval(timer); keepAwake(false); return openTimer(back); }
     });
   });
 }

@@ -72,7 +72,7 @@ export async function saveProductFood(food, cat, sub = null) {
   await db.putMyFood({
     ...(old ? { id: old.id, createdAt: old.createdAt } : { createdAt: Date.now() }),
     name: food.name, cat, ...(sub ? { sub } : {}), custom: true,
-    emoji: FOOD_CATS.find(x => x.id === cat)?.emoji || '🍽️',
+    emoji: old?.emoji || food.emoji || FOOD_CATS.find(x => x.id === cat)?.emoji || '🍽️',
     ...(food.image ? { image: food.image } : {}), ...(food.code ? { code: food.code } : {}),
     per100: food.per100, portions: (food.portions || []).filter(([l]) => l !== '100 g'),
   });
@@ -387,6 +387,9 @@ function openFoodDetail(food) {
   if (!portions.some(([, g]) => g === 100)) portions.push(['100 g', 100]);
   const [ul, ug] = portions[0];   // la ración principal: 1 bocata, 1 vaso, 1 unidad…
   const unitName = ul === '100 g' ? '100 g' : `1 ${ul} (${r0(ug)} g)`;
+  const mineOf = () => myFoodsCache.find(f => favKey(f.name) === favKey(food.name));
+  const known = mineOf() || FOODS.find(f => favKey(f.name) === favKey(food.name));
+  const curCat = food.cat || known?.cat || null;
   setSheetContent(`
     <div class="sheet-title-row">
       <button class="link back" data-back style="margin:0 0 0 -6px">${chev('l')} Alimentos</button>
@@ -397,6 +400,7 @@ function openFoodDetail(food) {
       <div><b>${esc(food.name)}</b><small>${esc(unitName)} · ${r0(p.kcal * ug / 100)} kcal</small></div>
     </div>
     <div class="emoji-grid" data-egrid hidden>${FOOD_EMOJIS.map(em => `<button data-em="${em}">${em}</button>`).join('')}</div>
+    <div class="ficha-cat">${catPickerHtml(curCat)}</div>
     <button class="btn primary" data-fuse style="margin-top:14px">🍽️ Añadir a una comida</button>
     <div class="label">${ul === '100 g' ? 'Por 100 g' : `Por ${esc(ul)} (${r0(ug)} g)`}</div>
     <div class="card">${macroRow(scaleFood(food, ug))}${p.sugar != null ? `<div class="sugar-line">azúcares ${String(r1(p.sugar * ug / 100)).replace('.', ',')} g</div>` : ''}</div>
@@ -405,6 +409,20 @@ function openFoodDetail(food) {
     <div class="label">Puntuación</div>
     <div class="card score-card">${scoreCard(mealScore({ items: [scaleFood(food, 100)] }))}</div>
     ${food.custom ? '<button class="btn secondary" data-fedit style="margin-top:18px">✏️ Editar alimento</button><button class="btn ghost danger" data-fdel>Borrar alimento</button>' : ''}`, body => {
+    // Categoría: si es tuyo se cambia; si es de la base, se guarda en «Mis alimentos» con la nueva
+    // (y deja de salir en la categoría de antes)
+    bindCatPicker(body.querySelector('.ficha-cat'), async (cat, sub) => {
+      const mine = mineOf();
+      if (mine) {
+        mine.cat = cat;
+        if (sub) mine.sub = sub; else delete mine.sub;
+        await db.putMyFood(mine);
+        await loadMyFoods();
+        toast(`Movido a ${catLabel(cat)}`);
+      } else await saveProductFood({ ...food, emoji: food.emoji || known?.emoji }, cat, sub);
+      food = mineOf() || { ...food, cat };
+      browserState.cat = cat;
+    }, '', { cat: curCat, sub: (food.sub || known?.sub) ?? null, name: () => food.name });
     const fb = body.querySelector('[data-ffav]');
     // Solo la amarilla (favorito de verdad); la blanca se pone desde la lista de su categoría
     const paintFav = () => { const on = favLevel(food.name) === 2; fb.classList.toggle('on', on); fb.textContent = on ? '★' : '☆'; };

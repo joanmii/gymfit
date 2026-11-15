@@ -23,7 +23,7 @@ const REGION = {
   'pecho-sup': 'chest', 'pecho-med': 'chest', 'pecho-inf': 'chest',
   'deltoide-ant': 'shoulder', 'deltoide-lat': 'shoulder', 'deltoide-post': 'shoulder',
   biceps: 'upperarm', triceps: 'upperarm', antebrazo: 'forearm',
-  abdominales: 'abs', oblicuos: 'abs',
+  abdominales: 'abs', 'abd-inf': 'abs', oblicuos: 'abs',
   dorsal: 'upperback', 'espalda-media': 'upperback', trapecio: 'trap', lumbar: 'lowerback',
   gluteos: 'glute', cuadriceps: 'thigh', isquios: 'thigh', aductores: 'thigh', gemelos: 'calf',
 };
