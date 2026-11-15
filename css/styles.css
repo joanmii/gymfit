@@ -1129,7 +1129,7 @@ input.switch:checked::before { transform: translateX(20px); }
   background: var(--card2); color: var(--muted); font-size: 22px; line-height: 1; transition: transform .2s var(--spring); }
 .fav-circle.on { color: #ffd60a; background: color-mix(in srgb, #ffd60a 18%, transparent); }
 .fav-circle:active { transform: scale(.88); }
-.cat-btn span { flex: 1; text-align: left; }
+.cat-btn span { flex: 1; text-align: left; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-btn.open svg { transform: rotate(180deg); }
 .cat-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
 .cat-list button { border: 0; border-radius: 12px; padding: 10px 10px; text-align: left; font: inherit; font-size: 14px; font-weight: 600;
@@ -1137,8 +1137,7 @@ input.switch:checked::before { transform: translateX(20px); }
 @media (prefers-color-scheme: dark) { .sheet .cat-list button { background: var(--card2); } }
 .cat-list button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
 .scan-save { margin: 10px 0 4px; }
-.cat-subs:empty { display: none; }
-.cat-subs { margin-top: 8px; }
+.cat-list .cat-back { grid-column: 1 / -1; background: none !important; color: var(--accent); padding: 4px 2px; }
 .sugar-line { text-align: center; font-size: 11.5px; color: var(--muted); font-weight: 600; margin-top: 2px; }
 .sugar-line:empty { display: none; }
 .totals .sugar-line { margin: -6px 0 8px; }
@@ -1148,4 +1147,3 @@ input.switch:checked::before { transform: translateX(20px); }
 .act-note.balance { margin-top: 4px; font-size: 12px; }
 .balance.neg b { color: var(--accent); }
 .balance.pos b { color: var(--orange); }
-.item-cat { margin-top: 10px; }

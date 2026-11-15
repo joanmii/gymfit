@@ -13,57 +13,57 @@ import { openAddMenu } from './nut-add.js';
 import { openReview } from './nut-review.js';
 import { convertToRecipe } from './nut-recipes.js';
 
-// ---------- Botón «Categoría»: al tocarlo se despliegan las categorías y eliges una ----------
+// ---------- Botón «Categoría»: al tocarlo se despliegan las categorías; al elegir una,
+// en el mismo sitio salen sus subcategorías (con la detectada por el nombre marcada) ----------
 const catLabel = id => { const c = FOOD_CATS.find(x => x.id === id); return c ? `${c.emoji} ${c.name}` : '🏷️ Categoría'; };
 export const catPickerHtml = (cur, label = '') => `
   <div class="cat-pick" data-catpick>
-    <button class="btn secondary add-toggle cat-btn" data-catbtn><span>${label ? `${label} · ` : ''}${esc(catLabel(cur))}</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
-    <div class="cat-list" data-catlist hidden>${FOOD_CATS.map(c => `<button class="${c.id === cur ? 'on' : ''}" data-cpick="${c.id}">${c.emoji} ${c.name}</button>`).join('')}</div>
-    <div class="chips scroll subchips cat-subs" data-subrow></div>
+    <button class="btn secondary add-toggle cat-btn" data-catbtn><span data-catlbl>${label ? `${label} · ` : ''}${esc(catLabel(cur))}</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    <div class="cat-list" data-catlist hidden></div>
   </div>`;
-// Debajo, las subcategorías de la elegida con la que se detecta por el nombre ya marcada;
-// tocar otra la fija a mano. onPick(cat, sub): sub = null si se deja la detectada.
+// onPick(cat, sub): sub = null si se deja la detectada por el nombre.
 // opts: { cat, sub, name: () => nombre actual del alimento }
 export function bindCatPicker(el, onPick, label = '', opts = {}) {
-  let cat = opts.cat || null, sub = opts.sub || null;
-  const paintSubs = () => {
-    const row = el.querySelector('[data-subrow]');
-    if (!row) return;
-    const subs = cat ? subsOf(cat) : [];
-    if (!subs.length) { row.innerHTML = ''; return; }
-    const auto = subOf({ name: opts.name?.() || '', cat });
-    const on = sub || auto;
-    row.innerHTML = subs.map(s => `<button class="chip ${s.id === on ? 'on' : ''}" data-spick="${s.id}" style="--c:var(--accent)">${s.emoji} ${s.name}</button>`).join('');
+  let cat = opts.cat || null, sub = opts.sub || null, pending = null;   // pending: categoría tocada, falta la subcategoría
+  const box = el.querySelector('[data-catpick]');
+  if (!box) return;
+  const list = box.querySelector('[data-catlist]'), btn = box.querySelector('[data-catbtn]');
+  const auto = c => subOf({ name: opts.name?.() || '', cat: c });
+  const paintBtn = () => {
+    const s = cat && subsOf(cat).find(x => x.id === (sub || auto(cat)));
+    box.querySelector('[data-catlbl]').textContent = `${label ? `${label} · ` : ''}${catLabel(cat)}${s ? ` › ${s.emoji} ${s.name}` : ''}`;
   };
-  paintSubs();
-  el.addEventListener('input', () => { if (!sub) paintSubs(); });   // al escribir el nombre, cambia la detectada
+  const show = mode => {
+    if (mode === 'subs') {
+      const c = pending || cat, on = pending ? auto(c) : sub || auto(c);
+      list.innerHTML = `<button class="cat-back" data-cback>‹ ${esc(catLabel(c))}</button>`
+        + subsOf(c).map(x => `<button class="${x.id === on ? 'on' : ''}" data-spick="${x.id}">${x.emoji} ${esc(x.name)}</button>`).join('');
+    } else {
+      list.innerHTML = FOOD_CATS.map(c => `<button class="${c.id === cat ? 'on' : ''}" data-cpick="${c.id}">${c.emoji} ${c.name}</button>`).join('');
+    }
+    list.hidden = false;
+    btn.classList.add('open');
+  };
+  const close = () => { list.hidden = true; btn.classList.remove('open'); };
+  const commit = (c, s) => { cat = c; sub = s; pending = null; close(); paintBtn(); haptic(); onPick(cat, sub); };
+  paintBtn();
+  el.addEventListener('input', () => { if (!sub) paintBtn(); });   // al escribir el nombre, cambia la detectada
   el.addEventListener('click', e => {
-    const sp = e.target.closest('[data-spick]');
-    if (sp && cat) {
-      sub = sp.dataset.spick === subOf({ name: opts.name?.() || '', cat }) ? null : sp.dataset.spick;
-      paintSubs();
-      haptic();
-      return onPick(cat, sub);
-    }
-    const box = e.target.closest('[data-catpick]');
-    if (!box) return;
+    if (!box.contains(e.target)) return;
     if (e.target.closest('[data-catbtn]')) {
-      const list = box.querySelector('[data-catlist]');
-      list.hidden = !list.hidden;
-      box.querySelector('[data-catbtn]').classList.toggle('open', !list.hidden);
-      return haptic();
+      if (list.hidden) { show('cats'); return haptic(); }
+      if (pending) return commit(pending, null);   // cerrar sin elegir subcategoría: la detectada
+      close(); return haptic();
     }
-    const c = e.target.closest('[data-cpick]');
-    if (!c) return;
-    box.querySelectorAll('[data-cpick]').forEach(b => b.classList.toggle('on', b === c));
-    box.querySelector('[data-catlist]').hidden = true;
-    box.querySelector('[data-catbtn]').classList.remove('open');
-    box.querySelector('[data-catbtn] span').textContent = `${label ? `${label} · ` : ''}${catLabel(c.dataset.cpick)}`;
-    if (c.dataset.cpick !== cat) sub = null;
-    cat = c.dataset.cpick;
-    paintSubs();
-    haptic();
-    onPick(cat, sub);
+    if (e.target.closest('[data-cback]')) { pending = null; show('cats'); return haptic(); }
+    const c = e.target.closest('[data-cpick]')?.dataset.cpick;
+    if (c) {
+      if (!subsOf(c).length) return commit(c, null);
+      pending = c === cat ? null : c;   // la misma categoría: se ve con su subcategoría marcada
+      show('subs'); return haptic();
+    }
+    const sp = e.target.closest('[data-spick]')?.dataset.spick;
+    if (sp) { const c2 = pending || cat; return commit(c2, sp === auto(c2) ? null : sp); }
   });
 }
 // Producto escaneado o de internet → «Mis alimentos» con su categoría (si ya estaba, se le cambia la categoría)
