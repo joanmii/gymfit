@@ -937,6 +937,7 @@ button.act:active { transform: scale(.98); }
 .fh-emoji:active { transform: scale(.94); }
 .ficha-cat { margin-top: 12px; }
 .ficha-cat .cat-btn { margin: 0; }
+.ficha-cat .cat-btn span { font-size: 14.5px; white-space: normal; overflow: visible; line-height: 1.3; }
 .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin: 10px 0 4px; padding: 8px; border-radius: 14px; background: var(--card2); }
 .emoji-grid button { border: 0; background: none; font-size: 24px; aspect-ratio: 1; border-radius: 10px; padding: 0; }
 .emoji-grid button:active, .emoji-grid button.on { background: var(--card3); }
