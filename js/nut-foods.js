@@ -219,6 +219,7 @@ export function mountFoodPicker(el, ctx) {
 }
 
 // ---------- Lista de alimentos y platos: ficha completa de cada uno y crear platos ----------
+const BASE_DISH_CATS = ['platos', 'bocatas', 'rapida'].map(id => FOOD_CATS.find(c => c.id === id));
 export const browserState = { q: '', cat: 'fav', sub: 'all', tab: 'foods', dtype: 'all', dsub: 'all' };
 const infoRow = (f, attr, sub, star = false) => `
   <button class="food-row" ${attr}>
@@ -243,17 +244,17 @@ export function openFoodBrowser() {
     const listEl = body.querySelector('[data-blist]');
 
     // Mis platos: por tipo de comida y buscando por nombre o ingrediente.
-    // «🍳 Platos»: los platos de la base (los mismos que en Alimentos › Platos)
+    // 🍳 Platos, 🥖 Bocatas y tapas y 🍔 Comida rápida: los de la base (los mismos que en Alimentos)
     const paintDishes = () => {
       const words = norm(st.q).split(/\s+/).filter(Boolean);
       const chip = (id, label) => `<button class="chip ${st.dtype === id ? 'on' : ''}" data-dtype="${id}" style="--c:var(--accent)">${label}</button>`;
-      const chipsRow = `<div class="chips scroll">${chip('all', 'Todos')}${chip('base', '🍳 Platos')}${MEAL_TYPES.map(t => chip(t.id, `${t.emoji} ${t.name}`)).join('')}</div>`;
-      const baseRows = () => foods.map((f, i) => infoRow(f, `data-fi="${i}"`, portionText(f), true)).join('');
-      const baseOf = sub => listFoods('platos', '', 500, sub).filter(f => words.every(w => norm(f.name).includes(w)));
-      if (st.dtype === 'base') {
-        foods = baseOf(words.length ? 'all' : st.dsub);
+      const chipsRow = `<div class="chips scroll">${chip('all', 'Todos')}${BASE_DISH_CATS.map(c => chip(c.id, `${c.emoji} ${c.name}`)).join('')}${MEAL_TYPES.map(t => chip(t.id, `${t.emoji} ${t.name}`)).join('')}</div>`;
+      const baseRows = (from = 0, list = foods) => list.map((f, i) => infoRow(f, `data-fi="${from + i}"`, portionText(f), true)).join('');
+      const baseOf = (cat, sub) => listFoods(cat, '', 500, sub).filter(f => words.every(w => norm(f.name).includes(w)));
+      if (BASE_DISH_CATS.some(c => c.id === st.dtype)) {
+        foods = baseOf(st.dtype, words.length ? 'all' : st.dsub);
         dishes = [];
-        listEl.innerHTML = `${chipsRow}${words.length ? '' : subChips('platos', st.dsub)}
+        listEl.innerHTML = `${chipsRow}${words.length ? '' : subChips(st.dtype, st.dsub)}
           <div class="food-list">${baseRows() || '<div class="muted small" style="text-align:center;margin:12px 0">Sin resultados</div>'}</div>`;
         return;
       }
@@ -261,11 +262,13 @@ export function openFoodBrowser() {
       dishes = all.filter(d => (st.dtype === 'all' || inType(d, st.dtype))
         && words.every(w => norm(d.name).includes(w) || d.items.some(i => norm(i.name).includes(w))));
       // buscando en «Todos» también salen los de la base
-      foods = st.dtype === 'all' && words.length ? baseOf('all').slice(0, 30) : [];
+      const groups = st.dtype === 'all' && words.length ? BASE_DISH_CATS.map(c => [c, baseOf(c.id, 'all').slice(0, 20)]).filter(([, l]) => l.length) : [];
+      foods = groups.flatMap(([, l]) => l);
       if (foods.length) {
+        let from = 0;
         listEl.innerHTML = `${chipsRow}
           ${dishes.length ? `<div class="label">⭐ Mis platos</div><div class="food-list">${dishes.map((d, i) => infoRow(d, `data-di="${i}"`, `${r0(sumItems(d.items).kcal)} kcal · ${d.items.slice(0, 3).map(x => x.name).join(', ')}${d.items.length > 3 ? '…' : ''}`)).join('')}</div>` : ''}
-          <div class="label">🍳 Platos</div><div class="food-list">${baseRows()}</div>`;
+          ${groups.map(([c, l]) => { const h = `<div class="label">${c.emoji} ${c.name}</div><div class="food-list">${baseRows(from, l)}</div>`; from += l.length; return h; }).join('')}`;
         return;
       }
       listEl.innerHTML = `
@@ -304,7 +307,7 @@ export function openFoodBrowser() {
       if (bt) { if (bt.dataset.btab !== st.tab) { st.tab = bt.dataset.btab; st.q = ''; openFoodBrowser(); } return; }
       if (e.target.closest('[data-newdish]')) return openDishEditor();
       const dtp = e.target.closest('[data-dtype]');
-      if (dtp) { st.dtype = dtp.dataset.dtype; haptic(); return paintDishes(); }
+      if (dtp) { if (dtp.dataset.dtype !== st.dtype) st.dsub = 'all'; st.dtype = dtp.dataset.dtype; haptic(); return paintDishes(); }
       const di = e.target.closest('[data-di]');
       if (di) return openDishDetail(dishes[Number(di.dataset.di)]);
       if (e.target.closest('[data-newfood]')) return openFoodEditor({ cat: st.cat === 'fav' ? 'lacteos' : st.cat });
