@@ -988,6 +988,7 @@ button.act:active { transform: scale(.98); }
 .rc-hero { text-align: center; margin: 4px 0 14px; }
 .rc-hero .e { display: block; font-size: 52px; line-height: 1.1; margin-bottom: 6px; }
 .rc-hero .sheet-title { margin: 0; }
+.rc-hero .dish-emoji { margin: 0 auto 6px; border: 0; background: var(--card2); border-radius: 20px; width: 84px; height: 84px; padding: 0; display: grid; place-items: center; }
 .rc-ings { padding: 4px 16px; }
 .rc-ings div { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
 .rc-ings div:last-child { border-bottom: 0; }

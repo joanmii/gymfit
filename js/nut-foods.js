@@ -346,11 +346,15 @@ export function openFoodBrowser() {
 
 // ---------- Mis platos: ficha y editor ----------
 export function openDishDetail(d) {
+  // Emoji: el del tipo de comida por defecto; tocándolo se elige otro
+  const def = () => TYPE(typesOf(d)?.[0]).emoji;
+  const egrid = () => [def(), ...FOOD_EMOJIS.filter(x => x !== def())].map(em => `<button data-dem="${em}" class="${(d.emoji || def()) === em ? 'on' : ''}">${em}</button>`).join('');
   setSheetContent(`
     <button class="link back" data-back>${chev('l')} Platos</button>
-    <div class="rc-hero">${d.photo ? `<img src="${d.photo}" alt="">` : `<span class="e">${d.emoji || TYPE(typesOf(d)?.[0]).emoji}</span>`}
+    <div class="rc-hero">${d.photo ? `<img src="${d.photo}" alt="">` : `<button class="e dish-emoji" data-demoji aria-label="Cambiar emoji">${d.emoji || def()}</button>`}
       <h2 class="sheet-title">${esc(d.name)}</h2>
     </div>
+    <div class="emoji-grid" data-degrid hidden></div>
     <div class="card">${macroRow(sumItems(d.items))}</div>
     <div class="label">Alimentos</div>
     ${ingList(d.items)}
@@ -362,6 +366,21 @@ export function openDishDetail(d) {
     <button class="btn ghost danger" data-ddel>Borrar plato</button>`, body => {
     body.addEventListener('click', async e => {
       if (e.target.closest('[data-back]')) return openFoodBrowser();
+      if (e.target.closest('[data-demoji]')) {
+        const g = body.querySelector('[data-degrid]');
+        if (g.hidden) g.innerHTML = egrid();
+        g.hidden = !g.hidden;
+        return haptic();
+      }
+      const dem = e.target.closest('[data-dem]');
+      if (dem) {
+        if (dem.dataset.dem === def()) delete d.emoji; else d.emoji = dem.dataset.dem;
+        await db.putFavorite(d);
+        await loadFavorites();
+        body.querySelector('[data-demoji]').textContent = d.emoji || def();
+        body.querySelector('[data-degrid]').hidden = true;
+        return haptic();
+      }
       const dt = e.target.closest('[data-dt]');
       if (dt) {
         const ts = new Set(typesOf(d) || ALL_TYPES);
@@ -370,10 +389,12 @@ export function openDishDetail(d) {
         await setDishTypes(d, ALL_TYPES.filter(t => ts.has(t)));
         await loadFavorites();
         dt.classList.toggle('on', ts.has(dt.dataset.dt));
+        const de = body.querySelector('[data-demoji]');
+        if (de && !d.emoji) de.textContent = def();
         return haptic();
       }
       if (e.target.closest('[data-duse]')) {
-        return openReview(newDraft({ name: d.name, photo: d.photo || null, items: d.items.map(i => ({ ...i })) }), false, true);
+        return openReview(newDraft({ name: d.name, photo: d.photo || null, ...(d.emoji ? { emoji: d.emoji } : {}), items: d.items.map(i => ({ ...i })) }), false, true);
       }
       if (e.target.closest('[data-dconv]')) return convertToRecipe(d);
       if (e.target.closest('[data-dedit]')) return openDishEditor(d);

@@ -51,7 +51,7 @@ export function openAddMenu(inPlace = false) {
 
 const recentRow = (m, attr) => `
   <button class="recent" ${attr}>
-    ${m.photo ? `<img src="${m.photo}" alt="">` : `<span class="ph">${MEAL_TYPES.find(t => t.id === (m.type || m.types?.[0]))?.emoji || '🍽️'}</span>`}
+    ${m.photo ? `<img src="${m.photo}" alt="">` : `<span class="ph">${m.emoji || MEAL_TYPES.find(t => t.id === (m.type || m.types?.[0]))?.emoji || '🍽️'}</span>`}
     <span class="n">${esc(m.name)}</span>
     ${gradeBadge(mealScore(m))}
     <span class="k">${r0(m.items?.length ? sumItems(m.items).kcal / servingsOf(m) : m.kcal)} kcal</span>
@@ -102,7 +102,7 @@ async function renderRecent(el) {
 
 function repeatMeal(m, type) {
   if (!m) return;
-  openReview(newDraft({ name: m.name, photo: m.photo, items: perServing(m), ...(type ? { type } : {}) }), false, true);
+  openReview(newDraft({ name: m.name, photo: m.photo, ...(m.emoji ? { emoji: m.emoji } : {}), items: perServing(m), ...(type ? { type } : {}) }), false, true);
 }
 
 // ---------- Describir por texto o voz ----------

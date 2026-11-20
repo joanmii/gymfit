@@ -229,7 +229,7 @@ export function openReview(draft, editing = false, fresh = false, inPlace = fals
       if (!f && !m.items.length) return toast('Añade al menos un alimento');
       const on = await toggleFavType(f, draft.type,
         types => db.putFavorite({ name: m.name, kind: 'plato', types, photo: draft.photo || null, items: m.items,
-          kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat, createdAt: Date.now() }),
+          kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat, ...(draft.emoji ? { emoji: draft.emoji } : {}), createdAt: Date.now() }),
         db.putFavorite, db.deleteFavorite);
       toast(on ? `Guardado en mis platos de ${t.name.toLowerCase()} ${t.emoji}` : `Quitado de mis platos de ${t.name.toLowerCase()}`);
       haptic();
