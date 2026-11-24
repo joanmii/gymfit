@@ -11,7 +11,7 @@ import { ALL_TYPES, defaultType, favKey, freshBox, ingList, inType, macroRow, ME
 import { bindStarLongPress, catChips, FAV_EMPTY, favLevel, FOOD_EMOJIS, foodThumb, isFoodFav, listFoods, loadFavorites, loadFoodFavs, loadMyFoods, myDishes, myFoodsCache, setDishTypes, starSpan, subChips, toggleFichaFav, toggleFoodFav, toggleTopFav } from './nut-favs.js';
 import { openAddMenu } from './nut-add.js';
 import { openReview } from './nut-review.js';
-import { convertToRecipe } from './nut-recipes.js';
+import { convertBaseDish, convertToRecipe } from './nut-recipes.js';
 
 // ---------- Botón «Categoría»: al tocarlo se despliegan las categorías; al elegir una,
 // en el mismo sitio salen sus subcategorías (con la detectada por el nombre marcada) ----------
@@ -361,9 +361,9 @@ export function openDishDetail(d) {
     <div class="label">🏷️ Aparece en</div>
     ${typeChips(t => inType(d, t), 'data-dt')}
     <button class="btn primary" data-duse style="margin-top:18px">🍽️ Apuntar</button>
-    <button class="btn secondary" data-dconv>✨ Convertir en receta</button>
     <button class="btn ghost" data-dedit>✏️ Editar</button>
-    <button class="btn ghost danger" data-ddel>Borrar plato</button>`, body => {
+    <button class="btn ghost danger" data-ddel>Borrar plato</button>
+    <button class="btn secondary" data-dconv style="margin-top:18px">✨ Convertir en receta</button>`, body => {
     body.addEventListener('click', async e => {
       if (e.target.closest('[data-back]')) return openFoodBrowser();
       if (e.target.closest('[data-demoji]')) {
@@ -424,7 +424,7 @@ const nutriRow = (title, sub, m) => `
     <span class="pk">${r0(m.kcal)} kcal</span>
     <span class="pm"><i class="p-c">P ${r1(m.protein)}</i> <i class="c-c">H ${r1(m.carbs)}</i> <i class="f-c">G ${r1(m.fat)}</i></span></div>`;
 
-function openFoodDetail(food) {
+export function openFoodDetail(food) {
   const p = food.per100;
   const portions = [...(food.portions || [])];
   if (!portions.some(([, g]) => g === 100)) portions.push(['100 g', 100]);
@@ -433,6 +433,7 @@ function openFoodDetail(food) {
   const mineOf = () => myFoodsCache.find(f => favKey(f.name) === favKey(food.name));
   const known = mineOf() || FOODS.find(f => favKey(f.name) === favKey(food.name));
   const curCat = food.cat || known?.cat || null;
+  const isBaseDish = BASE_DISH_CATS.some(c => c.id === curCat);   // platos, bocatas y comida rápida
   setSheetContent(`
     <div class="sheet-title-row">
       <button class="link back" data-back style="margin:0 0 0 -6px">${chev('l')} ${browserState.tab === 'dishes' ? 'Platos' : 'Alimentos'}</button>
@@ -451,7 +452,8 @@ function openFoodDetail(food) {
     <div class="card portion-list">${portions.map(([l, g]) => nutriRow(l === '100 g' ? '100 g' : `1 ${esc(l)}`, `${r0(g)} g`, scaleFood(food, g))).join('')}</div>
     <div class="label">Puntuación</div>
     <div class="card score-card">${scoreCard(mealScore({ items: [scaleFood(food, 100)] }))}</div>
-    ${food.custom ? '<button class="btn secondary" data-fedit style="margin-top:18px">✏️ Editar alimento</button><button class="btn ghost danger" data-fdel>Borrar alimento</button>' : ''}`, body => {
+    ${food.custom ? '<button class="btn secondary" data-fedit style="margin-top:18px">✏️ Editar alimento</button><button class="btn ghost danger" data-fdel>Borrar alimento</button>' : ''}
+    ${isBaseDish ? '<button class="btn secondary" data-fconv style="margin-top:18px">✨ Convertir en receta</button>' : ''}`, body => {
     // Categoría: si es tuyo se cambia; si es de la base, se guarda en «Mis alimentos» con la nueva
     // (y deja de salir en la categoría de antes)
     bindCatPicker(body.querySelector('.ficha-cat'), async (cat, sub) => {
@@ -492,6 +494,7 @@ function openFoodDetail(food) {
         return haptic();
       }
       if (e.target.closest('[data-fedit]')) return openFoodEditor(food);
+      if (e.target.closest('[data-fconv]')) return convertBaseDish(food);
       if (e.target.closest('[data-fdel]')) {
         if (!confirm(`¿Borrar «${food.name}» de tus alimentos?`)) return;
         await db.deleteMyFood(food.id);

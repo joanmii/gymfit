@@ -302,7 +302,7 @@ const INFO = [
   ['🥚', 'Alimentos y platos', 'var(--yellow)', [
     'Consulta los macros de cada alimento, añádelo a una comida y guarda tus favoritos.',
     'Platos: lo que sueles comer. Guárdalos con ☆ al apuntar una comida y repítelos con un toque.',
-    'Convierte un plato en receta: la IA escribe los pasos.',
+    'Convierte un plato en receta (tuyo o de la base, como una paella o un bocata): la IA saca los ingredientes y los pasos.',
     'Añade tus propios alimentos o escanéalos, con su categoría y su ración.',
     'Busca productos de Mercadona, Consum, Lidl… en internet.',
   ]],
@@ -310,6 +310,7 @@ const INFO = [
     'Recetas con sus pasos y temporizadores: elige para cuántas personas y se ajustan las cantidades.',
     'Crea las tuyas a mano o con IA: escribe lo que te apetece o elige alimentos, con qué cocinar y cuánto tiempo tienes.',
     'Guarda las que más uses en ⭐ Mis recetas y elige en qué comidas te las propone.',
+    'Modifica cualquier receta con IA: «no tengo nata», «añade especias», «más proteína»… y guarda la versión nueva o sustituye la tuya.',
   ]],
   ['⚖️', 'Peso y actividad', 'var(--blue)', [
     'Apunta tu peso o lee la captura de Zepp Life y se rellena sola.',

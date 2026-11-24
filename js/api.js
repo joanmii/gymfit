@@ -194,13 +194,13 @@ async function groq(prompt, { system, temperature = 0.2, maxTokens = 2048 } = {}
 }
 
 // Texto y recetas: con Groq si hay clave (gasta su cupo, no el de las fotos); si falla, con la IA principal
-async function textAI(prompt, { system, temperature = 0.2 } = {}) {
+async function textAI(prompt, { system, temperature = 0.2, maxTokens = 1500 } = {}) {
   if (state.settings.groqKey?.trim()) {
-    try { return await groq(prompt, { system, temperature }); }
+    try { return await groq(prompt, { system, temperature, maxTokens: Math.max(2048, maxTokens) }); }
     catch (e) { if (!hasAiKey()) throw e; }
   }
   return state.settings.provider === 'claude'
-    ? claude([{ type: 'text', text: prompt }], { system, maxTokens: 1500, temperature })
+    ? claude([{ type: 'text', text: prompt }], { system, maxTokens, temperature })
     : gemini([{ text: prompt }], { system, temperature, text: true });
 }
 
@@ -269,6 +269,84 @@ export async function recipeSteps({ name, items }) {
     emoji: [...String(j.emoji || '')][0] || null, minutes: Math.round(+j.minutes || 0) || null,
     tools: (j.tools || []).map(String), steps, notes: String(j.notes || '').trim(),
   };
+}
+
+// ---------- Receta completa (ingredientes con macros, pasos…) a partir del JSON de la IA ----------
+const r1 = v => +(+v || 0).toFixed(1);
+const nameKey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function parseFullRecipe(text, { known = [], servings = 1 } = {}) {
+  const match = (text || '').match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No he podido leer la receta. Inténtalo otra vez.');
+  const j = JSON.parse(match[0]);
+  // Si un ingrediente ya estaba (mismo nombre), se reutilizan sus valores escalados a los gramos nuevos
+  const byName = new Map(known.map(i => [nameKey(i.name), i]));
+  const items = (j.ingredients || []).map(i => {
+    const grams = Math.round(+i.grams || 0);
+    const old = byName.get(nameKey(i.name));
+    if (old && +old.grams > 0 && grams > 0) {
+      const k = grams / +old.grams;
+      if (k === 1) return { ...old };
+      const { base, ...rest } = old;
+      return { ...rest, grams, kcal: Math.round((+old.kcal || 0) * k), protein: r1(old.protein * k), carbs: r1(old.carbs * k), fat: r1(old.fat * k),
+        ...(old.sugar != null ? { sugar: r1(old.sugar * k) } : {}) };
+    }
+    return { name: String(i.name || 'Ingrediente'), grams, kcal: Math.round(+i.calories || 0), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat) };
+  }).filter(i => i.grams > 0);
+  if (!items.length) throw new Error('La IA no ha devuelto ingredientes. Inténtalo otra vez.');
+  const steps = (j.steps || []).map(x => String(x).trim()).filter(Boolean);
+  if (!steps.length) throw new Error('La IA no ha devuelto pasos. Inténtalo otra vez.');
+  return {
+    name: String(j.name || '').trim() || 'Receta', emoji: [...String(j.emoji || '')][0] || null,
+    minutes: Math.round(+j.minutes || 0) || null, servings, items, steps,
+    tools: (j.tools || []).map(String), notes: String(j.notes || '').trim(), also: String(j.also || '').trim(),
+    changes: String(j.changes || '').trim(),
+  };
+}
+
+const FULL_FORMAT = `Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta forma exacta:
+{"name":"","emoji":"","minutes":0,"tools":[""],"ingredients":[{"name":"","grams":0,"calories":0,"protein":0,"carbs":0,"fat":0}],"also":"","steps":[""],"notes":""CHANGES}
+- Nombres en español, cortos. emoji: un único emoji de comida. minutes: tiempo total aproximado.
+- tools: de entre Sartén, Olla, Horno, Airfryer, Microondas, Sin cocinar.
+- ingredients: lo que aporta calorías, con gramos; calories en kcal y protein, carbs y fat en gramos para esa cantidad.
+- also: básicos que apenas suman calorías (sal, especias, caldo, limón, vinagre…) en una línea, o "".
+- steps: de 3 a 8 pasos claros y concretos, con tiempos y temperaturas cuando haga falta (p. ej. «Hornea a 200 °C 20 minutos»).
+- notes: un truco o consejo breve.`;
+
+// Plato de la base (paella, bocata de lomo…): la IA lo desglosa en ingredientes y escribe los pasos
+const DISH_PROMPT = `Eres un cocinero y nutricionista experto en cocina española.
+Te doy un plato y el tamaño de 1 ración (gramos y valores aproximados). Escribe su receta casera típica para 1 ración:
+desglosa los ingredientes con cantidades que sumen aproximadamente esos gramos y esas calorías.
+${FULL_FORMAT.replace('CHANGES', '')}`;
+
+export async function dishToRecipe({ name, grams, kcal, protein, carbs, fat }) {
+  const prompt = `Plato: ${name}\nRación: ${Math.round(grams)} g · ${Math.round(kcal)} kcal · proteína ${r1(protein)} g · hidratos ${r1(carbs)} g · grasa ${r1(fat)} g`;
+  const r = parseFullRecipe(await textAI(prompt, { system: DISH_PROMPT, temperature: 0.4, maxTokens: 3000 }));
+  return { ...r, name };
+}
+
+// Modificar una receta con lo que pide el usuario: «no tengo nata», «añade especias», «sin horno»…
+const MODIFY_PROMPT = `Eres un cocinero y nutricionista. Te doy una receta y un cambio que pide el usuario
+(le falta algún ingrediente, quiere añadir algo, más proteína, menos calorías, otro utensilio…).
+Devuelve la receta COMPLETA ya modificada:
+- Cambia solo lo necesario para cumplir lo que pide; lo demás queda igual (mismos nombres y gramos).
+- Si le falta un ingrediente, sustitúyelo por una alternativa razonable o quítalo, y ajusta los pasos.
+- Mantén el mismo número de raciones: las cantidades son de la receta entera.
+- Si el cambio es grande, ajusta el nombre (p. ej. «Carbonara sin nata»); si no, deja el mismo.
+${FULL_FORMAT.replace('CHANGES', ',"changes":""')}
+- changes: en una frase corta, qué has cambiado.`;
+
+export async function modifyRecipe(r, request) {
+  const n = Math.max(1, Math.round(+r.servings || 1));
+  const recipe = [
+    `Receta: ${r.name}`, `Raciones: ${n}`,
+    r.minutes ? `Tiempo: ${r.minutes} min` : '', r.tools?.length ? `Con: ${r.tools.join(', ')}` : '',
+    `Ingredientes:\n${r.items.map(i => `- ${i.name}: ${Math.round(+i.grams || 0)} g`).join('\n')}`,
+    r.also ? `Además: ${r.also}` : '',
+    r.steps?.length ? `Pasos:\n${r.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}` : '',
+    r.notes ? `Notas: ${r.notes}` : '',
+  ].filter(Boolean).join('\n');
+  const text = await textAI(`${recipe}\n\nCambio que pide el usuario: ${request}`, { system: MODIFY_PROMPT, temperature: 0.4, maxTokens: 3000 });
+  return parseFullRecipe(text, { known: r.items, servings: n });
 }
 
 // Prueba rápida de la clave

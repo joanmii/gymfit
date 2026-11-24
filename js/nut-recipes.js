@@ -2,7 +2,7 @@
 // Nutrición · Recetas: predeterminadas, guardadas y creadas con IA
 // =========================================================
 import { db } from './db.js';
-import { createRecipe, recipeSteps } from './api.js';
+import { createRecipe, dishToRecipe, modifyRecipe, recipeSteps } from './api.js';
 import { norm } from './foods.js';
 import { BUILTIN } from './cookbook.js';
 import { chev } from './calendar.js';
@@ -10,10 +10,10 @@ import { closeSheet, onSheetCleanup, openSheet, setSheetContent } from './sheet.
 import { beep, unlockAudio } from './workout.js';
 import { esc, haptic, hasTextAi, r0, r1, toast } from './utils.js';
 import { renderNutrition } from './nutrition.js';
-import { ALL_TYPES, defaultType, dishTypes, favKey, ingList, macroRow, newDraft, perServing, servingsOf, sumItems, TOOLS, TYPE, typeChips, typesOf } from './nut-core.js';
+import { ALL_TYPES, defaultType, dishTypes, favKey, ingList, macroRow, newDraft, perServing, scaleFood, servingsOf, sumItems, TOOLS, TYPE, typeChips, typesOf } from './nut-core.js';
 import { favCache, foodThumb, listFoods, loadFavorites, loadFoodFavs, loadMyFoods, myRecipes, setDishTypes } from './nut-favs.js';
 import { openReview } from './nut-review.js';
-import { openDishDetail } from './nut-foods.js';
+import { openDishDetail, openFoodDetail } from './nut-foods.js';
 
 // ---------- Recetas: las predeterminadas y «Mis recetas» (guardadas, creadas a mano o con IA) ----------
 let recipeQ = '';
@@ -85,19 +85,24 @@ export function openRecipeEditor(r = {}, editing = false, inSheet = true) {
 }
 
 // Ficha de una receta. preview: aún no está guardada (la acaba de hacer la IA); again: pedir otra versión;
-// back: { label, fn } para volver a donde se abrió
-export function openRecipe(r, { preview = false, again = null, againLabel = '🔄 Otra idea', back = null, inPlace = false } = {}) {
+// back: { label, fn } para volver a donde se abrió; replace: receta tuya de la que sale esta versión (modificada
+// con IA), que se puede sobrescribir; changes: lo que ha cambiado la IA
+export function openRecipe(r, opts = {}) {
+  const { preview = false, again = null, againLabel = '🔄 Otra idea', back = null, inPlace = false, replace = null, changes = '' } = opts;
   const own = r.id != null;
   const n = servingsOf(r);
   const tot = sumItems(perServing(r));
   const meta = [r.minutes ? `⏱ ${r.minutes} min` : '', (r.tools || []).join(', '), n > 1 ? `${n} raciones` : ''].filter(Boolean).join(' · ');
-  const savedCopy = () => (own ? r : myRecipes().find(s => favKey(s.name) === favKey(r.name)));
+  // Una versión modificada puede llamarse igual que la original: solo cuenta como guardada la que se guarde desde aquí
+  let savedHere = null;
+  const savedCopy = () => (own ? r : replace ? savedHere : myRecipes().find(s => favKey(s.name) === favKey(r.name)));
   const html = `
     ${back ? `<button class="link back" data-rback>${chev('l')} ${back.label}</button>` : ''}
     <div class="rc-hero">${r.photo ? `<img src="${r.photo}" alt="">` : `<span class="e">${recipeEmoji(r)}</span>`}
       <h2 class="sheet-title">${esc(r.name)}</h2>
       ${meta ? `<div class="muted small">${esc(meta)}</div>` : ''}
     </div>
+    ${changes ? `<div class="notice" style="margin:0 0 12px">✨ ${esc(changes)}</div>` : ''}
     <div class="card">${macroRow(tot)}${n > 1 ? '<div class="muted small rc-per">por ración</div>' : ''}</div>
     <div class="card rc-ppl"><span>👥 Personas</span>
       <div class="stepper"><button class="icon-btn" data-ppl="-1" aria-label="Menos" ${n > 1 ? '' : 'disabled'}>−</button><b data-pn>${n}</b><button class="icon-btn" data-ppl="1" aria-label="Más">+</button></div></div>
@@ -113,12 +118,14 @@ export function openRecipe(r, { preview = false, again = null, againLabel = '�
     <button class="btn primary" data-ruse style="margin-top:18px">🍽️ ${n > 1 ? 'Apuntar 1 ración' : 'Apuntar como comida'}</button>
     ${own
       ? '<button class="btn secondary" data-redit>✏️ Editar</button><button class="btn ghost danger" data-rdel>Borrar receta</button>'
-      : `<button class="btn secondary" data-rsave></button>${preview
+      : `${replace ? `<button class="btn secondary" data-rrepl>💾 Guardar cambios en «${esc(replace.name)}»</button>` : ''}
+        <button class="btn ${replace ? 'ghost' : 'secondary'}" data-rsave></button>${preview
         ? `<button class="btn ghost" data-rcopy>✏️ Modificar</button>${again ? `<button class="btn ghost" data-ragain>${againLabel}</button>` : ''}`
-        : '<button class="btn ghost" data-rcopy>✏️ Copiar y modificar</button>'}`}`;
+        : '<button class="btn ghost" data-rcopy>✏️ Copiar y modificar</button>'}`}
+    <button class="btn secondary" data-rmod style="margin-top:18px">✨ Modificar con IA</button>`;
   (inPlace ? setSheetContent : openSheet)(html, body => {
     const sb = body.querySelector('[data-rsave]');
-    const paintSave = () => { if (sb) sb.textContent = savedCopy() ? '★ Guardada · quitar' : '⭐ Guardar en mis recetas'; };
+    const paintSave = () => { if (sb) sb.textContent = savedCopy() ? '★ Guardada · quitar' : replace ? '⭐ Guardar como receta nueva' : '⭐ Guardar en mis recetas'; };
     paintSave();
     const timers = new Map();
     onSheetCleanup(() => timers.forEach(id => clearInterval(id)));
@@ -175,16 +182,18 @@ export function openRecipe(r, { preview = false, again = null, againLabel = '�
         const s = savedCopy();
         if (s) {
           await db.deleteFavorite(s.id);
+          savedHere = null;
           toast('Quitada de mis recetas');
         } else {
-          await db.putFavorite({
+          const rec = {
             name: r.name, emoji: r.emoji || null, minutes: r.minutes || null, tools: r.tools || [], steps: r.steps || [],
             items: r.items, ...(n > 1 ? { servings: n } : {}),
             ...(r.notes || r.also ? { notes: [r.also ? `Además: ${r.also}` : '', r.notes || ''].filter(Boolean).join('\n') } : {}),
             kcal: r0(tot.kcal), protein: r1(tot.protein), carbs: r1(tot.carbs), fat: r1(tot.fat),
             ...(r.types?.length || !preview ? { types: r.types?.length ? r.types : dishTypes(r) } : {}),
             kind: 'recipe', custom: true, createdAt: Date.now(),
-          });
+          };
+          savedHere = { ...rec, id: await db.putFavorite(rec) };
           toast('Guardada en mis recetas 📖');
         }
         await loadFavorites();
@@ -204,8 +213,89 @@ export function openRecipe(r, { preview = false, again = null, againLabel = '�
         return toast('Receta borrada');
       }
       if (e.target.closest('[data-ragain]')) return again();
+      if (e.target.closest('[data-rrepl]')) {
+        if (!confirm(`¿Sustituir «${replace.name}» por esta versión?`)) return;
+        const upd = {
+          ...replace, name: r.name, emoji: r.emoji || replace.emoji || null, minutes: r.minutes || null, tools: r.tools || [], steps: r.steps || [],
+          items: r.items, servings: n,
+          notes: [r.also ? `Además: ${r.also}` : '', r.notes || ''].filter(Boolean).join('\n'),
+          kcal: r0(tot.kcal), protein: r1(tot.protein), carbs: r1(tot.carbs), fat: r1(tot.fat),
+        };
+        if (!upd.notes) delete upd.notes;
+        await db.putFavorite(upd);
+        await loadFavorites();
+        renderNutrition();
+        haptic();
+        toast('Receta actualizada 📖');
+        return openRecipe(upd, { inPlace: true });
+      }
+      if (e.target.closest('[data-rmod]')) {
+        if (!hasTextAi()) return toast('Añade tu clave de IA en Ajustes');
+        return openRecipeModify(r, { back: () => openRecipe(r, { ...opts, inPlace: true }), replace: own ? r : replace });
+      }
     });
   });
+}
+
+// ---------- Modificar una receta con IA: «no tengo nata», «añade especias», «más proteína»… ----------
+const MOD_IDEAS = [['🚫 No tengo…', 'No tengo '], ['🌶️ Más especias', 'Añade especias'], ['💪 Más proteína', 'Más proteína'],
+  ['🥗 Menos calorías', 'Menos calorías'], ['🌱 Vegetariana', 'Hazla vegetariana'], ['🥛 Sin lactosa', 'Sin lactosa'],
+  ['💨 En airfryer', 'Hazla en airfryer'], ['⚡ Más rápida', 'Más rápida, con menos pasos']];
+
+function openRecipeModify(r, { back, replace = null, text = '' }) {
+  setSheetContent(`
+    <button class="link back" data-mback>${chev('l')} Receta</button>
+    <h2 class="sheet-title">✨ Modificar con IA</h2>
+    <div class="muted small" style="margin-bottom:10px">${recipeEmoji(r)} ${esc(r.name)}</div>
+    <textarea id="mtext" class="rc-text" rows="3" placeholder="No tengo nata, añade especias, sin horno…">${esc(text)}</textarea>
+    <div class="chips" style="margin-top:10px">${MOD_IDEAS.map(([l], i) => `<button class="chip" data-midea="${i}" style="--c:var(--accent)">${l}</button>`).join('')}</div>
+    <button class="btn primary" id="mgo" style="margin-top:16px">✨ Modificar</button>`, body => {
+    const ta = body.querySelector('#mtext');
+    body.addEventListener('click', e => {
+      if (e.target.closest('[data-mback]')) return back();
+      const idea = e.target.closest('[data-midea]');
+      if (idea) {
+        // Las ideas se suman a lo escrito; «No tengo…» deja el cursor al final para escribir qué
+        const add = MOD_IDEAS[Number(idea.dataset.midea)][1], cur = ta.value.trim();
+        ta.value = cur ? `${cur.replace(/[.,]$/, '')}, ${add.charAt(0).toLowerCase()}${add.slice(1)}` : add;
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+        return haptic();
+      }
+      if (e.target.closest('#mgo')) {
+        const req = ta.value.trim();
+        if (!req) { ta.focus(); return toast('Escribe qué quieres cambiar'); }
+        runRecipeModify(r, req, { back, replace });
+      }
+    });
+  });
+}
+
+async function runRecipeModify(r, req, ctx) {
+  setSheetContent(`<div class="loading"><div class="spinner"></div><div>Modificando la receta…</div></div>`);
+  try {
+    const m = await modifyRecipe({ ...r, servings: servingsOf(r) }, req);
+    openRecipe({
+      ...m, name: m.name || r.name, emoji: m.emoji || r.emoji || null, photo: r.photo || null,
+      tools: m.tools.filter(t => TOOLS.some(([x]) => x === t)),
+      types: r.types?.length ? r.types : dishTypes(r),
+    }, {
+      preview: true, inPlace: true, replace: ctx.replace, changes: m.changes || `Cambio: ${req}`,
+      back: { label: 'Original', fn: ctx.back },
+      again: () => runRecipeModify(r, req, ctx), againLabel: '🔄 Otra versión',
+    });
+  } catch (err) {
+    setSheetContent(`
+      <button class="link back" data-mback>${chev('l')} Receta</button>
+      <h2 class="sheet-title">✨ Modificar con IA</h2>
+      <div class="notice err">${esc(err.message)}</div>
+      <button class="btn primary" id="retry" style="margin-top:14px">Reintentar</button>
+      <button class="btn ghost" id="edit">Cambiar lo que pido</button>`, body => {
+      body.querySelector('#retry').addEventListener('click', () => runRecipeModify(r, req, ctx));
+      body.querySelector('#edit').addEventListener('click', () => openRecipeModify(r, { ...ctx, text: req }));
+      body.querySelector('[data-mback]').addEventListener('click', ctx.back);
+    });
+  }
 }
 
 // ---------- Crear receta: escribiendo o con alimentos, con qué cocinarla y cuánto tiempo ----------
@@ -371,6 +461,28 @@ export async function convertToRecipe(d) {
       <div class="notice err">${esc(err.message)}</div>
       <button class="btn primary" id="retry" style="margin-top:14px">Reintentar</button>`, body => {
       body.querySelector('#retry').addEventListener('click', () => convertToRecipe(d));
+      body.querySelector('[data-rback]').addEventListener('click', back.fn);
+    });
+  }
+}
+
+// ---------- Plato de la base (paella, bocata…) en receta: la IA lo desglosa en ingredientes y pasos ----------
+export async function convertBaseDish(food) {
+  if (!hasTextAi()) return toast('Añade tu clave de IA en Ajustes');
+  const back = { label: food.name, fn: () => openFoodDetail(food) };
+  const [, ug] = food.portions?.[0] || ['ración', 100];
+  setSheetContent(`<div class="loading"><div class="spinner"></div><div>Convirtiendo en receta…</div></div>`);
+  try {
+    const x = await dishToRecipe(scaleFood(food, ug));
+    openRecipe({ ...x, photo: null, emoji: x.emoji || null, tools: x.tools.filter(t => TOOLS.some(([n]) => n === t)) },
+      { preview: true, again: () => convertBaseDish(food), againLabel: '🔄 Otra versión', back, inPlace: true });
+  } catch (err) {
+    setSheetContent(`
+      <button class="link back" data-rback>${chev('l')} ${esc(food.name)}</button>
+      <h2 class="sheet-title">✨ Convertir en receta</h2>
+      <div class="notice err">${esc(err.message)}</div>
+      <button class="btn primary" id="retry" style="margin-top:14px">Reintentar</button>`, body => {
+      body.querySelector('#retry').addEventListener('click', () => convertBaseDish(food));
       body.querySelector('[data-rback]').addEventListener('click', back.fn);
     });
   }
